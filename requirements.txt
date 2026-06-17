@@ -1,0 +1,27 @@
+# Core Python & Data
+numpy>=1.24
+scipy>=1.9
+pandas>=1.5
+
+# Classical ML
+scikit-learn>=1.2
+
+# Visualisation
+matplotlib>=3.5
+seaborn>=0.12
+
+# Explainability
+shap>=0.42
+
+# Testing
+pytest>=7.0
+
+# Jupyter
+jupyterlab>=4.0
+
+# PyTorch — install the build matching your hardware from https://pytorch.org/get-started/locally/
+# Example (CUDA): pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu<VERSION>
+# Example (CPU):  pip install torch torchvision torchaudio
+torch
+torchvision
+torchaudio
