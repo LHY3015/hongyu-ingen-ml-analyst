@@ -87,7 +87,7 @@ Variance per component (first 10):
 | PC6–10   | 18.00%   | 60.79%     |
 | PC11–27  | 34.94%   | 95.73%     |
 
-![1782490850928](image/W02_Feature_Analysis_Report/1782490850928.png)
+<img width="1057" height="347" alt="PCA Scree Plot" src="https://github.com/user-attachments/assets/4f877c30-a4c5-4f65-9c87-f3d6ff99614c" />
 
 PC1 leads at 17.78%, but variance is more evenly distributed across components compared to a stronger anomaly signal regime. Components PC6–27 capture residual sensor correlations (GPS random walk, temperature seasonality, inter-channel torque covariance) that contribute little discriminative power.
 
@@ -110,7 +110,7 @@ A baseline Random Forest (100 trees, unlimited depth) was trained on all 27 PCA 
 **Minimal top-K selected:**  K = 5
 **Top-5 val accuracy:**  95.32% (delta = 1.78 pp)
 
-![1782492126503](image/W02_Feature_Analysis_Report/1782492126503.png)
+<img width="1547" height="468" alt="RF Feature Importance and Accuracy vs K" src="https://github.com/user-attachments/assets/373b6fd3-ada2-4c3c-b61c-e774920f31d7" />
 
 The RF selects the top-5 PCA components — spanning spectral energy (PC1), spatial/battery correlation (PC2), raw torque amplitude (PC3), spectral shape (PC4), and LiDAR/nuisance variation (PC5) — as the minimal sufficient set.
 
@@ -142,7 +142,7 @@ AUC-ROC (val): 0.9702
 
 AUC-ROC (test): 0.9819
 
-![1782492397961](image/W02_Feature_Analysis_Report/1782492397961.png)
+<img width="1741" height="468" alt="Confusion Matrix and ROC Curve" src="https://github.com/user-attachments/assets/67a93d28-11e3-4c4e-81db-ae891e0ffa4f" />
 
 The model achieves high anomaly recall (91.3%) with moderate precision (79.0%), consistent with a class-weighted classifier prioritising detection over false-alarm reduction.
 
