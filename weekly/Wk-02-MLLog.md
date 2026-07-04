@@ -5,149 +5,105 @@
 1. **Synthetic dataset generation** — build a physically-coupled Aido Rover patrol dataset from a shared,
    stepable world core (not independent random channels), matching the platform's sensor/dynamics
    spec.
-2. **Preprocessing pipeline** — replicate the CNC methodology (FFT → PCA → RF) on the new domain.
-3. **Sequence tensor scaffolding** — build a sliding-window `[N, window, channels]` tensor (raw + FFT view)
-   for Phase B sequence models, with no look-back leakage across splits.
+2. **Preprocessing pipeline** — replicate the CNC methodology (FFT → PCA → RF) on the new domain, on a
+   split that prevents window/event leakage.
+3. **Sequence tensor scaffolding** — build sliding-window `[N, window, channels]` tensors (raw + FFT view)
+   for Phase B sequence models, on the same no-leakage split.
 4. **MDP / offline-RL scaffolding** — formalise the patrol task as an MDP over the same world core with
    blockages enabled, implement a scripted baseline policy, and generate a transition dataset for Phase C.
 
 ## What Was Built
 
-### World Core
+**World Core.** Stepable core (`RoverWorld.step`) shared by every downstream artefact: procedural map,
+terrain-modulated torque/battery, LiDAR, optional blockage mechanic. Anomalies are slip/stuck mechanical
+faults, statistically (not deterministically) coupled to terrain. Result: `shared_modules/rover_world.py`,
+reused unchanged by the RL scaffold below.
 
-A stepable core (`RoverWorld.step(action) → 10 channels + label + info`) drives every downstream
-artefact: a 2D procedurally-generated map (boustrophedon main loop + rejoining branch detours),
-terrain-modulated torque/battery, LiDAR ray-casting, and an optional blockage mechanic (off for the
-classifier dataset, on for RL). Anomalies are a mechanical self-fault (slip: one wheel spikes while others
-shed load; stuck: all four wheels rise, displacement collapses) with severity `s ~ Beta(2,5)`, statistically
-— not deterministically — coupled to terrain, so torque alone cannot trivially separate fault from rough
-ground.
+**Dataset Generation.** 15,000 steps @10Hz, 9 channels, `MAP_SEED=6`, `HAZARD=0.05` auto-calibrated, blockages
+off. Result: 15.1% anomaly (1,369 slip + 889 stuck), 718 injected missing values (0 after fill), 298 LiDAR
+outliers, 0 torque outliers.
 
-### Dataset Generation
+**Stratified Block Split.** 23 event-respecting blocks → `StratifiedGroupKFold` (7 folds) → val/test roles
+chosen from pre-training per-fold structural stats rather than arbitrarily → purge 50 rows/block. Reason:
+row-level (even stratified) splits leak given the 50-step FFT lookback and ~31-step fault durations —
+full rationale in `reports/W02_Feature_Analysis_Report.md` §3. Result: train 9,734/val 2,215/test 1,901
+(~16% anomaly each), 0/72 events split; canonical fold moved from 14th to 57th percentile of the 7-fold
+score distribution.
 
-15,000 timesteps at 10 Hz (25 min), 9 sensor channels (gps_lat, gps_lon, lidar_distance, battery_soc,
-torque_0–3, ambient_temp), driven by the world core on `MAP_SEED=6`, `HAZARD=0.05` (auto-calibrated to land
-the anomaly rate in the 14–16% band), blockages off, `continue` policy throughout. Realised:  15.1% anomaly
-(2,258 samples: 1,369 slip + 889 stuck), 0.5% random missingness injected (718 missing values before
-cleaning, 0 after forward/backward fill). 298 LiDAR 3σ outliers (the 200 m no-return dropout spikes); 0 torque
-outliers — terrain already spreads torque over a wide range, so a fault's added deviation is usually absorbed
-inside that natural spread rather than crossing 3σ.
+**Preprocessing Pipeline.** GPS fed as deltas (not absolute position); FFT(50-step, 5 channels) + 9 raw + 6
+cross-channel physical features (`inter_wheel_std`, `stall_ratio`) → 40-D matrix; PCA (95% target); RF
+feature-selection as an interpretability side-analysis. Code shared via `shared_modules/features.py`.
+Result: 19/40 PCA components (95.14% var); F1-criterion selects K=5 (0.8275 val F1) vs. accuracy's K=4
+(0.7701) — deployed model still uses the full 19-component set (see RF Benchmark).
 
-### Preprocessing pipeline
+**RF Benchmark.** `StandardScaler → PCA(0.95) → RandomForestClassifier` as one `Pipeline` so every CV fold
+refits scaler/PCA on its own rows only; grid search over `n_estimators × max_depth`, `StratifiedGroupKFold`
+5-fold, `class_weight='balanced'`, `SEED=42`. Result: best `n_estimators=200, max_depth=10`; test F1 0.7350
+default / 0.7359 val-tuned threshold, AUC 0.9668; 7-fold rotation F1 0.7544 ± 0.0596, AUC 0.9595 ± 0.0092;
+latency 7.856 ms single-sample — **PASS** (≤100 ms gate). Full metrics table/confusion matrices in the
+Results Summary below and `W02_RF_Benchmark.ipynb`.
 
-FFT (50 step window) on torque_0–3 + lidar_distance → 25 spectral features (dominant frequency,
-centroid, bandwidth, total power, peak-to-mean per channel), plus the 9 raw channels = 34-D feature matrix.
-PCA (95% variance target) retained 17 of 34 components, 96.04% variance; PC1 alone carries 34.04%, loading
-on torque spectral centroid and peak-to-mean — the causal fault model routes both slip and stuck through one
-shared driver (terrain-modulated torque), concentrating variance more than independently-randomised burst
-parameters would. RF feature selection (100 trees) over the 17 PCA components found the top-4
-(PC2, PC1, PC3, PC4) sufficient — 94.25% val accuracy vs. 96.21% full-set baseline (1.96 pp delta, within the
-2 pp threshold).
+**Sequence Tensor.** Windows {10, 20, 50} built on the same canonical split and purged rows, 11 channels
+(9 raw + 2 physical, instantaneous only — sequence models aggregate over time themselves) + a windowed FFT
+view. Result: saved to `data/rover_windows.npz`, same row set/anomaly rate as the classification split.
 
-### RF Benchmark
-
-Grid search `n_estimators ∈ {50,100,200} × max_depth ∈ {None,5,10,20}`, 5-fold CV, F1 scoring,
-`class_weight='balanced'`, `random_state=SEED=42`. Split: stratified 70/15/15 (train 10,465 / val 2,242 /
-test 2,243, each 15.1% anomaly).
-
-Best: `n_estimators=200, max_depth=None`, CV F1 = 0.7582, train time 8.31 s.
-
-| Split | Precision (anomaly) | Recall (anomaly) | F1 (anomaly) | AUC-ROC |
-| ----- | ------------------- | ---------------- | ------------ | ------- |
-| Train | 0.9838              | 1.0000           | 0.9918       | 1.0000  |
-| Val   | 0.7167              | 0.8757           | 0.7883       | 0.9707  |
-| Test  | 0.7261              | 0.8525           | 0.7843       | 0.9742  |
-
-Test confusion matrix: TN=1795, FP=109, FN=50, TP=289 (N=2,243).
-
-Latency: single-sample 7.642 ms, 1,000-sample batch 19.75 ms (0.0197 ms/sample). Constraint: Aido Rover
-general gate ≤100 ms @10 Hz → **PASS**.
-
-Train F1 (0.99) far exceeding val/test F1 (0.78–0.79) reflects genuine task difficulty carried over from the
-causal, terrain-confounded fault model — not a data-quality problem, and consistent with the Feature Analysis
-Report's finding that this task needs more PCA components than the CNC precedent (4 vs. 2) to reach a
-comparable accuracy band.
-
-### Sequence Tensor
-
-Sequential 70/15/15 split on the cleaned trace, `WINDOW=50` (matches the FFT window),
-`STRIDE=1`: train (10,450, 50, 9) 13.7% anomaly, val (2,200, 50, 9) 20.6%, test (2,200, 50, 9) 17.0%. Anomaly
-rate varies by split because splits are time-ordered, not stratified — expected for a sequential evaluation
-setup. A parallel windowed FFT-feature view (`Xfft_{train,val,test}`, shape `(N, 25)`) was added,
-reusing the same `fft_features` extractor as the preprocessing pipeline and the same split indices, so Phase
-B can train on raw, FFT, or both without re-deriving splits. Saved to `data/rover_windows.npz`.
-
-### MDP / Offline-RL Scaffolding
-
-Formalised as an MDP over the same world core (`blockages=True`) — the same core the W05 Gymnasium env will wrap, so offline data and the online env share identical dynamics. Full design rationale, calibration evidence, and every threshold's justification: `reports/RL_scaffold.md`. Formal spec: `rl/mdp_schema.md`.
-
-- **State (9-D):** `torque_mean/max/std`, `lidar_mean` (m), `soc_slope`, `battery_soc`, `route_progress`,
-  `next_main_block_dist`, `branch_block_dist`. No absolute GPS (position leakage — fixed terrain means faults
-  recur at fixed coordinates).
-- **Actions (5):** continue, slow (real fault-mitigating effect via `speed_factor`), reroute, raise-alert,
-  return-to-base (ends the episode).
-- **Reward:** a `(label, action)` table conditioned on `halted`, `main_blocked`, and `rough_terrain` (window
-  `torque_mean > 30 Nm`, isolating wet-grass/mud) — see Key Decisions below.
-- **Scripted policy:** a priority-ordered rule table (`POLICY_RULES`) — abort on low battery or an unresolved
-  full block; alert on ground-truth fault or a full block; reroute around a blocked main route; slow on
-  high-slip terrain; continue otherwise — plus 5% ε-explore over the four non-terminal actions.
-- **Generation:** multiple episodes (different blockage/fault seeds, same `MAP_SEED=6`), each capped at one
-  full 960 m loop (9,600 steps), chained to 48,000 rows. Episode 0 starts at 100% battery; subsequent episodes
-  draw `Uniform(40,100)%` (fleet-dispatch realism).
-
-Execution (`ROUGH_TERRAIN_TORQUE=30` Nm): 48,000 rows across 8 episodes. Action distribution: continue
-50.2%, raise-alert 18.7%, slow 16.1%, reroute 15.0%, return-to-base <0.1% (5 rows). Event-level onsets (a
-truer read of how often each action is *chosen*, not how long it's sustained): continue 1,303, raise-alert
-1,034, slow 929, reroute 836, return-to-base 5. Anomaly response rate (alert or abort on a true fault): 8,240/8,549 = 96.4%. 1 of 8
-episodes genuinely reached `battery_soc < 20%`.
+**MDP / Offline-RL Scaffolding.** MDP over the same world core (`blockages=True`), independent of the
+classification split (episode-level, not block-level). 9-D state (no absolute GPS, same leakage reasoning as
+above), 5 actions, reward table conditioned on `halted`/`main_blocked`/`rough_terrain` so context-dependent
+correctness of an action is captured rather than a flat `(label, action)` table. Scripted priority-rule
+policy + 5% ε-explore. 8 episodes (different blockage/fault seeds), chained to 48,000 rows. Full design
+rationale and calibration: `reports/W02_RL_scaffold.md`; formal spec: `rl/mdp_schema.md`. Result: action
+distribution continue 50.2% / raise-alert 18.7% / slow 16.1% / reroute 15.0% / return-to-base <0.1%; 96.4%
+anomaly response rate; 1/8 episodes reached low battery.
 
 ## Key Decisions
 
-**CNC-vs-Rover sensor difference.** The CNC wear-detection pipeline needed only 2 features (both from a
-single Z-axis positional channel) to reach 97.81% test accuracy — a clean, single-axis wear signature. The
-Rover anomaly signature needs 4 PCA components (94.25% val accuracy) spanning both torque spectral shape and LiDAR spectral shape, because a mechanical self-fault here is a distributed, multi-wheel dynamic event (slip: one wheel spikes, others shed load; stuck: all four rise together) confounded by terrain that also drives normal torque up — a single-channel positional signature has no analogue in this task. The RF benchmark's train-vs-test F1 gap (0.99 vs. 0.78) is the direct downstream consequence of that added difficulty.
-
-**MDP reward-design choice: conditioning on `halted`/`main_blocked`/`rough_terrain`, not just `(label, action)`.** A flat `(label, action)` reward table cannot express that the *same* nominal action is correct in
-one context and wrong in another once blockages and terrain risk are in play: `continue` while genuinely
-patrolling deserves `+1.0`, but `continue` while parked at an unresolved blockage does not (`−0.5`); `reroute`
-around a real obstruction deserves `0.0` (not penalised), but a gratuitous reroute on a clear route is `−0.3`;
-`slow` on high-slip terrain (wet-grass/mud, `torque_mean > 30 Nm`) deserves `0.0`, but `slow` on asphalt for no
-reason is `−0.1`. Without these three conditioning terms, an RL agent trained on this data could learn to sit
-motionless at a blockage and still collect the "productive patrol" reward every step — the conditioning closes
-that gap while keeping the reward a simple, auditable table.
-
-**World core reused as-is for RL.** The core's `world.step` / `env.step` split meant the RL scaffolding work only had to use the existing
-core with `blockages=True` — the same dataset-generation guarantee (byte-identical W2 output when blockages are off) holds regardless of what W05 does with the reward.
-
-**Multi-episode generation.** Each episode's blockage layout is one random draw;
-a genuinely dead-end "both branches blocked" configuration occurs in only ~4/10 independently-drawn seeds.
-48,000 rows (~5 full-loop episodes) was sized so the dataset has a realistic chance of exercising the
-full-block and low-battery termination paths at least a few times, which a single long rollout or an
-under-sized budget does not reliably do.
+- **Blocks, not rows, are the split unit** for every classification/sequence model this week and beyond —
+  prevents FFT-window and fault-event leakage across train/val/test.
+- **Val/test fold roles chosen structurally, not arbitrarily** — fixes a fold-selection blind spot in
+  `StratifiedGroupKFold` (balances anomaly rate but not event count/duration).
+- **GPS as delta, not absolute position** — avoids a fixed-map position shortcut; mirrors the MDP state design.
+- **Cross-channel physical features (`inter_wheel_std`, `stall_ratio`) close a gap per-channel FFT can't
+  express** — empirically the largest F1 gain of the week (ablation in `W02_Feature_Analysis_Report.md` §4).
+- **Deployed RF uses the full 19-component PCA set**, not the minimal-subset finding — minimal-subset was an
+  interpretability analysis, not a deployment choice.
+- **Feature/window code centralized in `shared_modules/features.py`** — a prior duplication had already caused
+  a silent divergence on 5/23 blocks.
+- **CNC-vs-Rover:** CNC needed 2 features from 1 channel for 97.8% accuracy with no leakage structure to guard
+  against; Rover needs 5 PCA components + purpose-built physical features on a harder, leakage-guarded,
+  imbalanced split — reflects task difficulty, not a weaker pipeline.
+- **MDP reward conditions on `halted`/`main_blocked`/`rough_terrain`** — a flat `(label, action)` table would
+  let an agent collect "productive patrol" reward while stalled at a blockage.
+- **World core reused as-is for RL** (`blockages=True`) — no dynamics divergence from the W2 classifier data.
+- **8-episode / 48,000-row budget** — sized so full-block and low-battery termination paths are each hit a
+  few times rather than never (dead-end blockage layouts occur in only ~4/10 random seeds).
 
 ## Results Summary
 
-| Item                     | Result                                                                                                      |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Classifier dataset       | 15,000 samples, 9 channels, 15.1% anomaly (1,369 slip + 889 stuck)                                          |
-| FFT features             | 25 (5 channels × 5 spectral features, 50-step window)                                                      |
-| PCA                      | 34 → 17 components, 96.04% variance                                                                        |
-| RF-selected features     | 4 PCA components (94.25% val acc., within 2 pp of 96.21% full-set)                                          |
-| RF benchmark (test)      | F1 (anomaly) 0.7843, AUC-ROC 0.9742, confusion TN=1795/FP=109/FN=50/TP=289                                  |
-| RF latency               | 7.642 ms single-sample — PASS (≤100 ms gate)                                                             |
-| Sequence tensor          | X_train (10450,50,9) 13.7% anomaly · X_val (2200,50,9) 20.6% · X_test (2200,50,9) 17.0% + FFT view (N,25) |
-| MDP state / action space | 9-D state · 5 discrete actions                                                                             |
-| RL transitions           | 48,000 rows, 8 episodes, 96.4% anomaly response rate, 1/8 episodes reach low battery                        |
+| Item                                               | Result                                                                                                                                                                                             |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Classifier dataset                                 | 15,000 samples, 9 channels, 15.1% anomaly (1,369 slip + 889 stuck)                                                                                                                                 |
+| Block split                                        | 23 blocks; train 9,734 (16.4%) / val 2,215 (16.0%) / test 1,901 (16.0%); 7.7% purged; 0/72 events split; fold roles structurally selected                                                          |
+| Features                                           | 40-D: 9 raw + 25 FFT (5 channels × 5 spectral features, 50-step window) + 6 physical (inter-wheel std, stall ratio); GPS fed as deltas; shared across notebooks via`shared_modules/features.py` |
+| PCA                                                | 40 → 19 components, 95.14% variance                                                                                                                                                               |
+| RF-selected features (analysis only)               | 5 PCA components, F1-selection criterion (94.67% val acc. / 0.8275 val F1)                                                                                                                         |
+| RF benchmark (test, deployed on all 19 components) | F1 (anomaly) 0.7350 default / 0.7359 tuned threshold, AUC-ROC 0.9668                                                                                                                               |
+| RF 7-fold rotation                                 | F1 0.7544 ± 0.0596, AUC 0.9595 ± 0.0092 (canonical fold at 57th percentile)                                                                                                                      |
+| RF latency                                         | 7.856 ms single-sample (full pipeline) — PASS (≤100 ms gate)                                                                                                                                     |
+| Sequence tensor                                    | window ∈ {10,20,50}, 11 channels; train (9734,W,11) 16.4% / val (2215,W,11) 16.0% / test (1901,W,11) 16.0% + FFT view (N,25)                                                                      |
+| MDP state / action space                           | 9-D state · 5 discrete actions                                                                                                                                                                    |
+| RL transitions                                     | 48,000 rows, 8 episodes, 96.4% anomaly response rate, 1/8 episodes reach low battery                                                                                                               |
 
 ---
 
 ## Deliverables Completed
 
 - `W02_Rover_World_Core.ipynb` + `W02_Rover_World_Core_Design.md` — shared world core, design & validation
-- `W02_Preprocessing_Pipeline.ipynb` — dataset generation, cleaning, FFT, PCA, RF selection
-- `W02_Feature_Analysis_Report.md` —  data quality / PCA / RF / CNC-comparison report
-- `W02_RF_Benchmark.ipynb` — grid search, metrics, latency benchmark
-- `W02_Sequence_and_RL_Scaffolding.ipynb` — sliding-window tensor + FFT view + MDP transition rollout
-- `synthetic_rover_data.csv`, `rover_windows.npz`, `rover_transitions.csv`
+- `W02_Preprocessing_Pipeline.ipynb` — dataset generation, cleaning, structural fold-role split, FFT/physical features, PCA, RF selection analysis
+- `W02_Feature_Analysis_Report.md` — data quality / block split / PCA / RF / CNC-comparison report
+- `W02_RF_Benchmark.ipynb` — Pipeline-based group-aware grid search, metrics, threshold tuning, 7-fold rotation, latency benchmark
+- `W02_Sequence_and_RL_Scaffolding.ipynb` — 11-channel sliding-window tensors (3 window sizes) + FFT view + MDP transition rollout
+- `shared_modules/features.py` — shared FFT/physical-feature/tabular-matrix functions (preprocessing, sequence, MLP notebooks)
+- `synthetic_rover_data.csv`, `rover_stratified_block_split.csv`, `rover_windows.npz`, `rover_transitions.csv`
 - `mdp_schema.md` — formal MDP specification
-- `RL_scaffold.md` — RL design rationale and calibration
+- `W02_RL_scaffold.md` — RL design rationale and calibration
