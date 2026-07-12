@@ -1,20 +1,18 @@
-# Rover World Core: Design Report
-
-Brief design report for the synthetic Aido Rover data generator
-All scales are anchored to the Aido Rover product documentation.
+Hongyu LIU  
+InGen Dynamics - ML & NN Analyst Intern, July 2026
 
 ---
 
 ## 1. What it is
 
-**Stepable world core** — `world.step(action) → 10 channels + label + info` , that generates physically-coupled sensor stream and is reused by downstream tasks: W2 anomaly detection & sequence models, and W5–6 reinforcement learning.
+Brief design report for the synthetic Aido Rover data generator,  all scales are anchored to the Aido Rover product documentation.
+
+**Stepable world core** — `world.step(action) → 9 sensor channels + label + info` , that generates physically-coupled sensor stream and is reused by downstream tasks: W2 anomaly detection & sequence models, and W5–6 reinforcement learning.
 
 **Core idea:** A 2D map + a path-planned pose drive GPS & LiDAR; torque/power drives the battery; terrain/slip drives anomalies. Channels data are derived from this world, not sampled as independent random streams — so cross-channel correlations (e.g. torque spike ↔ faster SoC drop) arise from the physics, not from hand-coded coupling.
 
 **Run knobs:** `SEED` (episode RNG: faults, noise, blockage positions),
 `MAP_SEED` (map/route/terrain layout), `BLOCKAGES` (on/off), `N_STEPS`. `HAZARD` is auto-calibrated per map.
-
----
 
 ## 2. Designs & rationale
 
@@ -34,8 +32,6 @@ All scales are anchored to the Aido Rover product documentation.
 | **`reroute` = get around a TEMPORARY BLOCK, then rejoin**                             | Blockage is LiDAR-visible & external → decoupled from the invisible self-fault, so`reroute` is a learnable sensor/map-driven decision, not a memorized reflex.                                                                                                                                  |
 | **incline = 0** (no elevation layer)                                                    | Terrain zones already provide the torque/SoC confounder; a continuous elevation field isn't needed.                                                                                                                                                                                                |
 | **Fixed topology per map + per-episode events**                                         | One`MAP_SEED` → one fixed map; blockages+faults (episode-rng) vary per episode → closed-loop reactive policy, not open-loop memorization. Different `MAP_SEED` are used to train+eval **separately** and check reward/policy robustness across layouts (not cross-map generalization). |
-
----
 
 ## 3. Map & Route Generation
 
@@ -61,29 +57,25 @@ Escalation ladder: main edge blocked + branch clear → `reroute`; both blocked 
 low SoC → `return-to-base`. (The edge the rover starts already committed to is never blocked,
 since it can't be rerouted mid-edge.) Blockages are OFF for the W2 detection stream and ON for W5 RL.
 
----
-
 ## 4. Usage per task
 
 | Task (week)                                             | How to run                                                                                                                                                                                      | Artifact                             |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| **Anomaly detection** (W2–3: RF, MLP, 1D-CNN)    | `RoverWorld(hazard=HAZARD, seed, map_seed)` (blockages OFF); drive `step(0)`; dump 10 channels + label                                                                                      | `synthetic_rover_data.csv` (85/15) |
+| **Anomaly detection** (W2–3: RF, MLP, 1D-CNN)    | blockages off; drive step(0); dump 9 sensor channels + label                                                                                                                                       | `synthetic_rover_data.csv` (85/15) |
 | **Sequence models** (W3–4: LSTM/GRU/Transformer) | same stream → sliding-window tensor + windowed FFT view                                                                                                                                        | `rover_windows.npz`                |
-| **Offline RL / BC** (W5)                          | `RoverWorld(..., blockages=True)`; interactive rollout with a scripted behaviour policy (reroute on block, alert on fault/full-block, return-to-base on low SoC, ε-explore); log (s,a,r,s′) | `rover_transitions.csv`            |
-| **Online RL** (W5 DQN / W6 PPO, GRPO-style)       | wrap the core in a Gymnasium`env.step` (obs/reward/done), blockages ON                                                                                                                        | policy checkpoints                   |
-| **Multi-agent** (W6)                              | two`RoverWorld` on the shared map; pass each rover as the other's `dynamic_obstacles` so they see each other                                                                                | PettingZoo env                       |
-| **Reward-robustness check**                       | run the whole train+eval on several`MAP_SEED`s separately; if a reward only "works" on one layout it is over-fit                                                                              | —                                   |
+| **Offline RL / BC** (W5)                          | blockages on; interactive rollout with a scripted behaviour policy (reroute on block, alert on fault/full-block, return-to-base on low SoC, ε-explore); log (s,a,r,s′) | `rover_transitions.csv`            |
+| **Online RL** (W5 DQN / W6 PPO, GRPO-style)       | wrap the core in a Gymnasium env.step (obs/reward/done), blockages ON                                                                                                                        | policy checkpoints                   |
+| **Multi-agent** (W6)                              | two RoverWorld on the shared map; pass each rover as the other's dynamic_obstacles so they see each other                                                                                | PettingZoo env                       |
+| **Reward-robustness check**                       | run the whole train+eval on several MAP_SEEDs separately; if a reward only "works" on one layout it is over-fit                                                                              | —                                   |
 
 Notes: state for RL = window summary (torque mean/max/std, lidar mean, SoC-slope) + `battery_soc`
 
 + `position_summary` (built from `info`: progress + next-edge blockage distances). **Absolute GPS
   is excluded from anomaly-classifier features** (fixed terrain → faults at fixed coords → position leakage).
 
----
-
 ## 5. Outputs & channels
 
-**Channels (10) — the sensor stream + label (→ CSV / model features):**
+**Channels (9 sensors + label) — the sensor stream (→ CSV / model features):**
 
 | #    | channel                  | meaning                            | scale / model                                                                            |
 | ---- | ------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------- |

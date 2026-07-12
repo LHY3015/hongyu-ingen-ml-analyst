@@ -1,6 +1,6 @@
 
 Hongyu LIU  
-InGen Dynamics - ML & NN Analyst Internship, June 2026  
+InGen Dynamics - ML & NN Analyst Intern, June 2026  
 
 ---
 # PIC(Physical Intelligence Core) 2.0 ML model class map

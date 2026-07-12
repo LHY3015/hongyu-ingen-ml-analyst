@@ -1,13 +1,14 @@
-# RL Scaffold: Design Report
+Hongyu LIU  
+InGen Dynamics - ML & NN Analyst Intern, July 2026  
+
+---  
 
 ## 1. World-core suitability
 
 The shared world core (`rover_world.py`) is used as-is for RL. Its two-layer
 architecture (`world.step` physics core vs. a deferred `env.step` MDP wrapper) is the correct shape
 for this task: the physics is validated and frozen, while reward/observation design can keep iterating in
-W05 without touching data generation. 
-
----
+W05 without touching data generation.
 
 ## 2. State space — 9-D
 
@@ -27,8 +28,6 @@ statistic would inherit the same confound.
 Absolute GPS is excluded for the same position-leakage reason it is excluded from the anomaly classifier's
 features (fixed terrain → faults recur at fixed coordinates). `route_progress` plus the two block distances
 serve as the position summary instead.
-
----
 
 ## 3. Reward function
 
@@ -53,8 +52,6 @@ Discount factor: 0.99, anchored to the PIC 2.0 GRPO product-config range (γ=0.9
 platforms, product docs §6) rather than an arbitrary pick. Unlike the thresholds in §4 — calibrated against
 this dataset — gamma has zero effect on `rover_transitions.csv` itself; it only matters once a value-based
 method (Q-learning/DQN) trains on this offline data in W05, which may tune it further.
-
----
 
 ## 4. Scripted behaviour policy
 
@@ -93,13 +90,13 @@ The product docs describe the Aido Rover slowing specifically on **wet grass/mud
 (↓ fault-trigger probability via `speed_factor`). Terrain-conditional torque, calibrated on the actual
 8-episode generation (reroute + slow both active), shows a clean separation:
 
-| Terrain   | True occupancy (length-weighted) | Window torque_mean p25–p90 | Slip weight |
-| --------- | -------------------------------- | --------------------------- | ----------- |
-| asphalt   | ~40–58%                         | 5.8–6.0 Nm                 | 0.00        |
-| gravel    | ~4–17%                          | 17.4–23.1 Nm               | 0.10        |
-| dry_grass | ~8–24%                          | 25.2–27.5 Nm               | 0.30        |
-| wet_grass | ~13–20%                         | 36.9–40.0 Nm               | 0.70        |
-| mud       | ~1–15%                          | 42.5–54.8 Nm               | 1.00        |
+| Terrain   | True occupancy (length-weighted) | Window torque_mean  | Slip weight |
+| --------- | -------------------------------- | ------------------- | ----------- |
+| asphalt   | ~40–58%                          | 5.8–6.0 Nm          | 0.00        |
+| gravel    | ~4–17%                           | 17.4–23.1 Nm        | 0.10        |
+| dry_grass | ~8–24%                           | 25.2–27.5 Nm        | 0.30        |
+| wet_grass | ~13–20%                          | 36.9–40.0 Nm        | 0.70        |
+| mud       | ~1–15%                           | 42.5–54.8 Nm        | 1.00        |
 
 (Ranges span the main-loop vs. branch-edge measurements and the 8-episode aggregate; branch/detour edges run
 somewhat rougher than the main loop, consistent with the design note that a detour should not be
@@ -112,18 +109,16 @@ symmetrically conditioned on the same boolean (§3).
 Verified on the actual generation: per-step `slow` share is 16.1%, with 929 event-level onsets — on the same
 order as `reroute` (836) and `raise-alert` (1,034), not a rare action.
 
----
-
 ## 5. Episode structure
 
-### 5.1 Episode termination is tied to the scripted decision, not the explored action
+### 5.1 Episode termination is tied to the scripted decision
 
 `done` is derived from `forced_done or (scripted_action == 4)` — the policy's decision before any ε-explore
 override — and the exploration pool itself excludes `return-to-base` (`{continue, slow, reroute, raise-alert}` only). Every `done=True` row therefore reflects a genuine scripted decision (low battery, an
 unresolved full block, or a completed loop), never a 1-in-20 exploratory action that happened to land on
 "abort mission".
 
-### 5.2 Episode cap: an explicit step counter, not RoverWorld's total_steps
+### 5.2 Episode cap: an explicit step counter
 
 `EP_CAP=9600` (one full 960 m loop) is enforced via an explicit `ep_len` counter that forces `done=True`
 once reached — `RoverWorld`'s `total_steps` constructor argument only affects the `ambient_temp` seasonal
@@ -156,8 +151,6 @@ event is logged once per row for its entire ~150 m approach, and a fault event o
 whenever the action differs from the previous row within the same episode) alongside the per-step
 distribution, so a frequently-sustained action isn't mistaken for a frequently-chosen one.
 
----
-
 ## 6. Known limitations
 
 - The stuck-counter and ground-truth-label conditions make the behaviour policy non-Markov in the 9-D state
@@ -169,8 +162,6 @@ distribution, so a frequently-sustained action isn't mistaken for a frequently-c
   has a learnable positive effect in full-block episodes instead of always ending in abort.
 - `route_progress` is an odometer-based approximation (cumulative distance mod loop length) and drifts
   slightly from true DAG position after a branch detour.
-
----
 
 ## 7. Downstream usage
 

@@ -1,12 +1,13 @@
 Hongyu LIU
-InGen Dynamics - ML & NN Analyst Intern, June 2026
+InGen Dynamics - ML & NN Analyst Intern, July 2026
 
 ---
 
 ## 1. Setup
 
 **Platforms:** Aido Rover (MLP + 1D-CNN anomaly detection) · Fari (MLP + RF interaction-quality, second task)
-**Seed:** 42 · **Sampling rate:** 10 Hz (Aido Rover)
+**Seed:** 42
+**Sampling rate:** 10 Hz (Aido Rover)
 
 The MLP and 1D-CNN both evaluate on the canonical `data/rover_stratified_block_split.csv` (13,850 anchor rows: train 9,734 / val 2,215 / test 1,901, 16.4% / 16.0% / 16.0% anomaly) — the same split `W02_RF_Benchmark.ipynb` uses, so all three model families are compared on identical rows.
 

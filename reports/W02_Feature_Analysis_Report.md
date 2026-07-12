@@ -46,19 +46,20 @@ Every model this week and next — RF, MLP, 1D-CNN and (Week 3) the RNN/Transfor
 2. **Blocks assigned to 7 folds** with `StratifiedGroupKFold`, which balances each fold's row-level anomaly rate while keeping every row of a block on the same side.
 3. **Fold roles (val/test/train) chosen from structural statistics, before any model is trained.** `StratifiedGroupKFold` only balances the anomaly *rate*; with just 72 fault events spread across 7 folds, folds still differ in event *difficulty* (duration, count) — an axis the row-level stratification cannot see. Per-fold statistics, computed before any role is assigned:
 
-   | Fold        | Events | Mean duration | Anomaly rate | Duration deviation | Rate deviation | Combined deviation        |
-   | ----------- | ------ | ------------- | ------------ | ------------------ | -------------- | ------------------------- |
-   | 0           | 12     | 24.4          | 16.8%        | 6.94               | 1.76 pp        | 0.338                     |
-   | **1** | 11     | 32.2          | 14.7%        | 0.82               | 0.40 pp        | **0.052 (min)**     |
-   | **2** | 9      | 33.8          | 14.8%        | 2.42               | 0.23 pp        | **0.092 (2nd-min)** |
-   | 3           | 8      | 40.1          | 14.3%        | 8.76               | 0.76 pp        | 0.330                     |
-   | 4           | 9      | 33.7          | 14.0%        | 2.31               | 1.09 pp        | 0.146                     |
-   | 5           | 11     | 25.8          | 12.5%        | 5.54               | 2.50 pp        | 0.343                     |
-   | 6           | 12     | 33.3          | 18.9%        | 1.89               | 3.83 pp        | 0.315                     |
+| Fold        | Events | Mean duration | Anomaly rate | Duration deviation | Rate deviation | Combined deviation        |
+| ----------- | ------ | ------------- | ------------ | ------------------ | -------------- | ------------------------- |
+| 0           | 12     | 24.4          | 16.8%        | 6.94               | 1.76 pp        | 0.338                     |
+| **1** | 11     | 32.2          | 14.7%        | 0.82               | 0.40 pp        | **0.052 (min)**     |
+| **2** | 9      | 33.8          | 14.8%        | 2.42               | 0.23 pp        | **0.092 (2nd-min)** |
+| 3           | 8      | 40.1          | 14.3%        | 8.76               | 0.76 pp        | 0.330                     |
+| 4           | 9      | 33.7          | 14.0%        | 2.31               | 1.09 pp        | 0.146                     |
+| 5           | 11     | 25.8          | 12.5%        | 5.54               | 2.50 pp        | 0.343                     |
+| 6           | 12     | 33.3          | 18.9%        | 1.89               | 3.83 pp        | 0.315                     |
 
-   (Overall: mean event duration 31.4 steps, anomaly rate 15.05%; deviations are relative to these.)
+(Overall: mean event duration 31.4 steps, anomaly rate 15.05%; deviations are relative to these.)
 
-   **val** is assigned the most representative fold (fold 1) — decisions made on val (early stopping, hyperparameters, decision thresholds) propagate to every downstream model with no correcting mechanism, so it should be the most structurally typical fold available.
+**val** is assigned the most representative fold (fold 1) — decisions made on val (early stopping, hyperparameters, decision thresholds) propagate to every downstream model with no correcting mechanism, so it should be the most structurally typical fold available.
+
 4. **test** is assigned the next-most representative fold (fold 2) — its single-fold number carries a little more residual sampling noise. train includes all remaining folds (0, 3, 4, 5, 6 — including the most extreme ones)  , where an unusual fold (very long events, an elevated or depressed anomaly rate) is a diversity asset, not a liability. This selection uses only pre-training structural statistics.
 5. **Purge:** the first 50 rows of every block (`WINDOW_MAX=50`, the largest lookback window used anywhere this week or next) are excluded from every model's row set. This guarantees no lookback window — at any window size — ever reaches across a block boundary into a different split.
 

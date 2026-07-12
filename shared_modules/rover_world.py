@@ -1,7 +1,7 @@
 """
 Aido Rover world core
 
-Shared stepable physics core. world.step(action) -> 10 sensor channels + label + info, driven by one shared latent world
+Shared stepable physics core. world.step(action) -> 9 sensor channels + label + info, driven by one shared latent world
 (2D map + path-planned pose). Imported by the W2 preprocessing / sequence / transition-table
 pipelines and the W5-6 RL environments, so offline data and the online env share identical
 dynamics. 
