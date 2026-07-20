@@ -1,0 +1,10 @@
+week,policy,task,platform,timesteps,n_seeds,gamma,eval_horizon,eval_policy,energy_weight,shaping_low_soc,alert_clears_block,return_mean,return_std,len_mean,latency_ms,constraint_ms,verdict,notes
+5,random_no_abort,rover_patrol,Aido Rover,0,5,0.99,9600,deterministic,0.05,True,False,-606.64,239.01,3942.0,,100.0,,reference
+5,scripted_label_blind,rover_patrol,Aido Rover,0,5,0.99,9600,deterministic,0.05,True,False,4072.02,516.1,9529.6,,100.0,,"deployable rule policy (navigates, cannot alert on faults)"
+5,expert_label_aware,rover_patrol,Aido Rover,0,5,0.99,9600,deterministic,0.05,True,False,12199.24,736.02,9367.2,,100.0,,privileged ceiling (uses ground-truth label; not deployable)
+5,tabular_Q,rover_patrol,Aido Rover,250 ep,5,0.99,9600,deterministic,0.05,True,False,-320.42,734.84,3472.4,0.0021,100.0,PASS,"96-state discretization, intuition only"
+5,DQN,rover_patrol,Aido Rover,80000,5,0.99,9600,deterministic,0.0,True,False,1208.23,672.73,,0.076,100.0,PASS,shaping ablation
+5,DQN,rover_patrol,Aido Rover,80000,5,0.99,9600,deterministic,0.05,True,False,1562.68,517.08,,0.076,100.0,PASS,canonical
+5,DQN,rover_patrol,Aido Rover,80000,5,0.99,9600,deterministic,0.2,True,False,1544.62,678.55,,0.076,100.0,PASS,shaping ablation
+5,BC_offline,rover_patrol,Aido Rover,39642 rows,5,0.99,9600,deterministic,0.05,True,False,6286.73,688.95,9477.8,0.2787,100.0,PASS,"behaviour cloning, episode split"
+5,FQI_offline,rover_patrol,Aido Rover,39642 rows·60it,5,0.99,9600,deterministic,0.05,True,False,1393.74,525.34,3909.6,,100.0,PASS,"neural fitted-Q, offline; horizon-limited (see §3)"
