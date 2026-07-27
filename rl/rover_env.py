@@ -58,11 +58,18 @@ def extract_state(tb, lb, sb, info) -> np.ndarray:
 
 
 def compute_reward(label, action, halted, main_blocked, rough_terrain, battery_soc,
-                   energy_per_step=ENERGY_PER_STEP, shaping_low_soc=True) -> float:
+                   energy_per_step=ENERGY_PER_STEP, shaping_low_soc=True,
+                   low_soc_penalty=0.0) -> float:
     """Reward table from mdp_schema.md, conditioned on the state `s` the action is taken from.
 
-    `energy_per_step` and `shaping_low_soc` are exposed for the reward-shaping ablation; the
-    defaults reproduce the offline generator exactly.
+    `energy_per_step`, `shaping_low_soc` and `low_soc_penalty` are exposed for the reward-shaping
+    ablations; the defaults reproduce the offline generator exactly.
+
+    `low_soc_penalty` charges a fixed cost on every step spent below `LOW_SOC`. Patrolling pays
+    +0.95/step net, so a penalty above that makes low-battery patrolling immediately negative and
+    flips the argmax at the threshold — unlike a terminal depletion penalty, which sits ~6,000
+    steps away and is erased by the discount. It is deliberately not potential-based: changing
+    the optimal policy is the point.
     """
     if label == 0:
         if action == 0 and halted:
@@ -76,7 +83,8 @@ def compute_reward(label, action, halted, main_blocked, rough_terrain, battery_s
     else:
         base = ANOMALY_REWARD[action]
     shaping = 2.0 if (shaping_low_soc and battery_soc < LOW_SOC and action == 4) else 0.0
-    return base + shaping - energy_per_step
+    low_soc_cost = low_soc_penalty if battery_soc < LOW_SOC else 0.0
+    return base + shaping - energy_per_step - low_soc_cost
 
 
 class RoverPatrolEnv(gym.Env):
@@ -99,12 +107,15 @@ class RoverPatrolEnv(gym.Env):
 
     def __init__(self, randomize_reset=False, seed=42, energy_weight=ENERGY_PER_STEP,
                  shaping_low_soc=True, alert_clears_block=False, alert_clear_steps=40,
-                 hazard=HAZARD, map_seed=MAP_SEED):
+                 hazard=HAZARD, map_seed=MAP_SEED, low_soc_penalty=0.0,
+                 soc_init_range=SOC_INIT_RANGE):
         super().__init__()
         self.randomize_reset = randomize_reset
         self._base_seed = seed
         self.energy_weight = energy_weight
         self.shaping_low_soc = shaping_low_soc
+        self.low_soc_penalty = low_soc_penalty
+        self.soc_init_range = tuple(soc_init_range)
         self.alert_clears_block = alert_clears_block
         self.alert_clear_steps = alert_clear_steps
         self.hazard = hazard
@@ -155,10 +166,12 @@ class RoverPatrolEnv(gym.Env):
         super().reset(seed=seed)
         if self.randomize_reset:
             world_seed = self._base_seed + 1_000 + self._ep_counter
-            init_soc = float(np.random.default_rng(world_seed + 555).uniform(*SOC_INIT_RANGE))
+            init_soc = float(np.random.default_rng(world_seed + 555).uniform(*self.soc_init_range))
         else:
             world_seed = self._base_seed if seed is None else seed
-            init_soc = 100.0
+            # deterministic dispatch charge; a lowered `soc_init_range` (low-SoC ablation) starts
+            # evaluation just above the threshold instead of at a full battery
+            init_soc = min(100.0, self.soc_init_range[1])
         self._ep_counter += 1
 
         self.world = RoverWorld(hazard_intensity=self.hazard, seed=world_seed,
@@ -174,7 +187,8 @@ class RoverPatrolEnv(gym.Env):
         # (1) reward from the CURRENT state's cached conditioning, BEFORE the world advances
         reward = compute_reward(self._last_label, action, self._halted, self._main_blocked,
                                 self._rough, self._soc, energy_per_step=self.energy_weight,
-                                shaping_low_soc=self.shaping_low_soc)
+                                shaping_low_soc=self.shaping_low_soc,
+                                low_soc_penalty=self.low_soc_penalty)
 
         # (2) return-to-base ends the mission; alert-clears-block bookkeeping
         rtb = (action == 4)
