@@ -1,15 +1,15 @@
 panel,model,score,score_std,score_metric,latency_ms,gate_ms
-rover_classification,RandomForest,0.7492,0.0481,F1 (7-fold),8.7684,100.0
-rover_classification,MLP,0.7936,0.0472,F1 (7-fold),0.0279,100.0
-rover_classification,1D-CNN,0.7307,0.1147,F1 (7-fold),0.079,100.0
-rover_classification,LSTM,0.7038,0.159,F1 (7-fold),0.1623,100.0
-rover_classification,GRU,0.7468,0.0818,F1 (7-fold),0.6368,100.0
-rover_classification,Transformer,0.8289,0.0688,F1 (7-fold),0.3483,100.0
+rover_classification,RandomForest,0.7492,0.0481,F1 (7-fold),8.9628,100.0
+rover_classification,MLP,0.7936,0.0472,F1 (7-fold),0.0406,100.0
+rover_classification,1D-CNN,0.7307,0.1147,F1 (7-fold),0.1039,100.0
+rover_classification,LSTM,0.7038,0.159,F1 (7-fold),0.1664,100.0
+rover_classification,GRU,0.7468,0.0818,F1 (7-fold),0.669,100.0
+rover_classification,Transformer,0.8289,0.0688,F1 (7-fold),0.3451,100.0
 humanoid_trajectory,CV extrapolation,2.77,,"mean Euclidean error (cm, lower better)",0.003,50.0
-humanoid_trajectory,Linear,1.5,,"mean Euclidean error (cm, lower better)",0.0559,50.0
-humanoid_trajectory,MLP,1.63,0.06,"mean Euclidean error (cm, lower better)",0.0305,50.0
-humanoid_trajectory,LSTM,1.44,0.04,"mean Euclidean error (cm, lower better)",0.1101,50.0
-humanoid_trajectory,Transformer,1.6,0.15,"mean Euclidean error (cm, lower better)",0.3494,50.0
+humanoid_trajectory,Linear,1.5,,"mean Euclidean error (cm, lower better)",0.0543,50.0
+humanoid_trajectory,MLP,1.63,0.06,"mean Euclidean error (cm, lower better)",0.032,50.0
+humanoid_trajectory,LSTM,1.44,0.04,"mean Euclidean error (cm, lower better)",0.1091,50.0
+humanoid_trajectory,Transformer,1.6,0.15,"mean Euclidean error (cm, lower better)",0.3492,50.0
 rover_rl_patrol,BC (offline),0.12574323095660772,0.07543573447898283,"normalised return (floor=0, ceiling=1)",0.0309,100.0
 rover_rl_patrol,DQN (best value-based),-0.1673837877862216,0.06273556087854641,"normalised return (floor=0, ceiling=1)",0.068,100.0
 rover_rl_patrol,"REINFORCE+baseline, BC-init",0.2667311181725774,0.09051424714056402,"normalised return (floor=0, ceiling=1)",0.0266,100.0
