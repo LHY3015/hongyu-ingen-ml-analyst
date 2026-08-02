@@ -18,7 +18,8 @@
   run with privileged and observation-only feature sets and validated against the reward that
   actually generated the data.
 - **Two-rover PettingZoo environment** (`rl/rover_multiagent_env.py`) with independent PPO learners
-  under a shared team reward and a counterfactual difference reward.
+  under a shared team reward and a counterfactual difference reward, and termination parity with the
+  flat environment (stuck-at-full-block timeout).
 
 ## Results
 
@@ -56,8 +57,9 @@ so absolute returns are comparable only within a fixed world set.
 PPO and the GRPO-style variant both converge to patrolling for ~310 steps and then taking the
 terminating action to bank a small positive return; two seeds produce bit-identical trajectories,
 which is what a deterministic rule on a deterministic world gives. A random initial policy earns about
-−0.78 per step, so ending the episode is genuinely better than continuing, and once the policy shortens
-its episodes it stops collecting the long-horizon patrol data that would overturn that estimate. DQN is
+−1.7 per step (measured under training conditions), so ending the episode is genuinely better than
+continuing, and once the policy shortens its episodes it stops collecting the long-horizon patrol data
+that would overturn that estimate. DQN is
 immune through replay and ε-greedy. So is plain REINFORCE, at 1,579 — the two methods that fall into
 the trap are the two with a clipped surrogate and a bootstrapped critic, and the high-variance
 estimator's updates keep the policy moving through the region where terminating looks locally optimal.
@@ -83,7 +85,9 @@ so a 1,000-step horizon still does not reach it.
 | GRPO-style, BC-init | 5,182 | **5,807** | **7,193** | **6,352** | **4,902** | **5,448** |
 
 Tied on the training layout, the group-relative policy wins on all five held-out layouts by
-1,286–2,300 while PPO loses 21–50 %, and DQN does not transfer at all. The ordering matches the
+1,286–2,300 — on four of them above its own seed-0 canonical 5,157 — while PPO's seed-0 policy loses
+2–38 % of its own canonical 5,170 (the held-out runs are seed-0 policies; the table's canonical column
+is the 5-seed mean), and DQN does not transfer at all. The ordering matches the
 behavioural split: PPO's canonical advantage comes from alerting at 241 false alarms per 1,000 normal
 steps, a policy tuned to where the faults are on this terrain, and its fine-tuning drops rerouting from
 the BC prior's 0.84 to 0.34. The GRPO implementation carries a KL penalty to the frozen BC reference
@@ -141,9 +145,11 @@ behaviour cloning's 0.50 on the same information, on 25 parameters against the p
 A main sweep edge is 160 m, which is 1,700–1,900 environment steps; only the short connectors are
 ~600. The option backup carries `γᵏ` at that `k`, which is of order 10⁻⁸, so an option-level learner at
 γ = 0.99 optimises exactly the flat objective. What the hierarchy changes is credit-assignment
-distance: the difference between a clean edge and one whose blockage matters is +134.4 against +116.6
-in intra-option discounted return while the undiscounted sums are 3,128 and 3,127, and the option
-learner attaches that difference to one backup where the flat learner propagates it through ~1,700.
+distance: whatever return differential an edge carries, the option learner attaches it to one backup
+where the flat learner propagates it through ~1,700 TD steps. The per-edge differential itself is
+small — clean 133.1 against blockage-ahead 119.0 in intra-option discounted return pooled over the
+ten worlds (1,564 against 1,495 undiscounted), and unstable once conditioned to same-length sweep
+edges (14 against 6 edges) — so the credit-assignment case rests on the factorial, not this statistic.
 
 Budget and discount were therefore crossed rather than confounded — an option spans 600–1,900 steps, so
 250k steps buy only ~266 decisions and 1M buy ~1,060.
@@ -152,17 +158,20 @@ Budget and discount were therefore crossed rather than confounded — an option 
 | --- | --- | --- | --- | --- |
 | scripted option policy (no learning) | — | 10,853 ± 2,291 | 0.52 | 0.60 |
 | γ = 0.99, 250k | ~266 | 10,044 ± 2,066 | 0.49 | 0.68 |
-| γ = 0.99, 1M | ~1,060 | 11,118 ± 586 | 0.58 | 0.53 |
+| γ = 0.99, 1M | ~1,060 | 10,651 ± 1,679 | 0.55 | 0.60 |
 | γ = 1.0, 250k | ~266 | 11,276 ± 586 | 0.74 | 0.50 |
-| γ = 1.0, 1M | ~1,060 | **12,151 ± 141** | **0.80** | **0.40** |
+| γ = 1.0, 1M | ~1,060 | **12,129 ± 121** | **0.82** | **0.40** |
 
-Both effects are real and close to additive — the discount is worth +1,232 at the small budget and
-+1,033 at the large one, the budget +1,074 at γ = 0.99 and +875 at γ = 1.0 — and the discount effect
-surviving at four times the budget is what rules out a sample-efficiency artefact. On rerouting they
-separate cleanly: budget +0.09, discount +0.25, both 0.80, against 0.04–0.09 for DQN in the flat MDP.
-The discount also collapses the seed spread: at 250k the γ = 0.99 arm splits into two of five seeds at
-7,560 and three above 11,000 for ±2,066, while every γ = 1.0 seed lands between 10,528 and 12,237 for
-±586, and the larger budget narrows it to ±141. Week 5's account of one mechanism behind three failures was one mechanism too few.
+Both effects are significant on the paired ten-world Wilcoxon and close to additive — the discount is
+worth +1,232 at the small budget (`p = 0.014`) and +1,478 at the large one (`p = 0.002`), the budget
++608 at γ = 0.99 (`p = 0.027`) and +853 at γ = 1.0 (`p = 0.037`) — and the discount effect growing at
+four times the budget is what rules out a sample-efficiency artefact. The best arm's +1,276 over the
+scripted option policy is **not significant** (`p = 0.065`). On rerouting they separate cleanly:
+budget +0.06–0.08, discount +0.25–0.27, both 0.82, against 0.04–0.09 for DQN in the flat MDP.
+The discount also collapses the seed spread where the budget does not: at 250k the γ = 0.99 arm splits
+into two of five seeds at 7,560 and three above 11,000 for ±2,066, and at 1M one seed still lands at
+7,560 for ±1,679, while every γ = 1.0 seed lands between 10,528 and 12,343 — ±586 at 250k, ±121 at
+1M. Week 5's account of one mechanism behind three failures was one mechanism too few.
 
 ### Mutual visibility between rovers spans 2.6 % of the loop
 
@@ -182,7 +191,7 @@ which stretch, so the observation carries an explicit global partner block.
 | --- | --- | --- | --- | --- |
 | REINFORCE | 62 | 0.977 | 0.23 | 2.92 |
 | REINFORCE + value baseline | 62 | 0.995 | **0.11** | 2.98 |
-| GRPO-style, BC warm start | 127 | 0.265 | 1.79 | 1.00 by construction |
+| GRPO-style, BC warm start | 126 | 0.265 | 1.79 | 1.00 by construction |
 
 Every update splits its own transitions into two disjoint halves and compares the two policy gradients.
 The value baseline halves the disagreement (0.23 → 0.11) while the marginal advantage variance is
@@ -198,27 +207,33 @@ REINFORCE's learned value baseline rather than PPO's.
 
 | | shared team reward | difference reward |
 | --- | --- | --- |
-| team return | −2,522 ± 2,089 | −2,386 ± 1,741 |
-| loop coverage fraction | 0.735 ± 0.012 | 0.735 ± 0.012 |
-| redundantly covered edges | 1.44 | 1.42 |
-| decisions per episode | 5.4 | 5.4 |
+| team return | 3,819 ± 434 | 3,840 ± 430 |
+| loop coverage fraction | 0.735 ± 0.012 | 0.733 ± 0.015 |
+| redundantly covered edges | 1.30 | 1.18 |
+| decisions per episode | 8.8 | 8.5 |
+
+The wrapper needed termination parity with the flat environment before these numbers meant anything:
+without the flat env's stuck-at-full-block timeout, a rover that committed onto a blocked edge stood
+halted to the horizon at −0.5 per step, and team returns came out at −2,522 and −2,386; with the
+timeout restored the same training configuration lands at +3,819 and +3,840.
 
 The two credit-assignment schemes are indistinguishable on every coordination metric. An option spans
-~1,200 environment steps, so a 9,600-step patrol holds ~5.4 decisions per rover; 1M training steps buy
-~560 decisions and, at 32 per rollout, ~17 policy updates. A difference reward is a counterfactual on
-an agent's contribution, and with 17 updates neither learner has a contribution to attribute. Coverage
-sits between random (0.425) and scripted (0.825), where a barely-trained learner should be. The
-obstacle for the CRL-MRS direction is therefore the decision rate, three orders of magnitude below the
-control rate at node granularity.
+~900 environment steps here, so an episode of ~8,200 steps holds ~8.8 decisions per rover; 1M training
+steps buy ~970 decisions and, at 32 per rollout, ~30 policy updates. A difference reward is a
+counterfactual on an agent's contribution, and with 30 updates neither learner has a contribution to
+attribute. Coverage sits between random (0.425) and scripted (0.825), where a barely-trained learner
+should be. The obstacle for the CRL-MRS direction is therefore the decision rate, three orders of
+magnitude below the control rate at node granularity.
 
 ### Latency
 
 Single-step inference over 2,000 `timeit` calls: scripted rule policy and the tabular option lookup
 0.001 ms, the 2×64 policy nets 0.027 ms, the BC MLP 0.028 ms, DQN 0.066 ms, PPO 0.115 ms. The two
 paths not already known from Phase B are the hierarchical one, a high-level selection roughly once a
-minute plus the 10 Hz controller, at 0.002 ms for a step running both levels, and the two-rover one at
-0.030 ms for two forward passes per decision. Every path clears the 100 ms patrol gate by three to
-five orders of magnitude, so the RL cost sits entirely in training.
+minute plus the 10 Hz controller, at 0.003 ms for a step running both levels, and the two-rover one at
+0.19 ms for two forward passes per decision. The learned Q-table option selection (0.003 ms) and the
+observation-only IRL policy (0.023 ms) are also measured directly. Every path clears the 100 ms patrol
+gate by three to five orders of magnitude, so the RL cost sits entirely in training.
 
 ## Deliverables Completed
 

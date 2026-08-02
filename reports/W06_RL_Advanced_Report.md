@@ -17,7 +17,7 @@ environment to two rovers. Four results carry the week.
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | A supervised warm start is a precondition for on-policy training here | every from-scratch on-policy run collapses to a 310-step episode; the same code from a BC checkpoint returns 6,421 (§4) |
 | The training layout selects the wrong policy                          | PPO and GRPO tie on map 6 (`p = 0.084`); GRPO wins all five held-out layouts by 1,286–2,300 (§5)                     |
-| Week 5's single mechanism was two mechanisms                          | crossing decision budget with discount separates them, both worth ~+1,000 return (§6)                                   |
+| Week 5's single mechanism was two mechanisms                          | crossing decision budget with discount separates them, both significant, worth +608 to +1,478 return (§6)               |
 | IRL identifiability comes from the demonstrations                     | the same code recovers Spearman 0.31 from the logged rule policy and 0.97 from a soft-optimal one (§8)                  |
 
 ## 2. Evaluation Protocol
@@ -79,7 +79,8 @@ the bottom-right corner, alerting heavily while almost never rerouting.
 
 *Figure 3 — Evaluation return during training, ±1 std over five train seeds. Left: from-scratch
 REINFORCE and REINFORCE-with-baseline. Right: the value-based and policy-gradient families at matched
-budget. PPO and the GRPO-style variant fall to near zero within the first 25k steps and stay there.*
+budget. PPO declines to near zero over the first ~50k steps and stays there; the GRPO-style variant is
+already at ~200 by its first evaluation and never leaves.*
 
 | method                              | return                 | ep len | P(reroute\|block) | false alerts /1k |
 | ----------------------------------- | ---------------------- | ------ | ----------------- | ---------------- |
@@ -93,9 +94,10 @@ budget. PPO and the GRPO-style variant fall to near zero within the first 25k st
 
 PPO and the GRPO-style variant converge to patrolling for ~310 steps and then taking the terminating
 action to bank a small positive return; two seeds produce bit-identical trajectories, which is what a
-deterministic rule on a deterministic world gives. A random initial policy earns about −0.78 per step,
-so ending the episode is genuinely better than continuing, and once the policy shortens its episodes it
-stops collecting the long-horizon patrol data that would overturn that estimate.
+deterministic rule on a deterministic world gives. A random initial policy earns about −1.7 per step
+(measured: fresh policy weights, stochastic actions, ten rollouts under training conditions), so ending
+the episode is genuinely better than continuing, and once the policy shortens its episodes it stops
+collecting the long-horizon patrol data that would overturn that estimate.
 
 **The two methods that fall into this are the two with a clipped surrogate and a bootstrapped critic.**
 Plain REINFORCE reaches 1,579, and DQN is immune through replay and ε-greedy. The high-variance
@@ -143,7 +145,7 @@ relative L2 difference on a log scale, which is scale-aware and therefore compar
 | -------------------------- | ------------ | ------ | --------------------- | -------------------- |
 | REINFORCE                  | 62           | 0.977  | 0.23                  | 2.92                 |
 | REINFORCE + value baseline | 62           | 0.995  | **0.11**        | 2.98                 |
-| GRPO-style, BC warm start  | 127          | 0.265  | 1.79                  | 1.00 by construction |
+| GRPO-style, BC warm start  | 126          | 0.265  | 1.79                  | 1.00 by construction |
 
 **The value baseline halves the gradient disagreement without changing the advantage variance.** The
 relative L2 difference falls from 0.23 to 0.11 while the marginal variance of the advantage is
@@ -172,13 +174,15 @@ on the five other layouts the generator validated, five worlds each.
 ![Figure 5](image/W06_PolicyGradient_RL/cross_layout.png)
 
 *Figure 5 — Return on the training layout (left of the divider) and on five layouts the policies never
-saw. Map seed 3 is absent because the Week-2 generator could not calibrate its terrain exposure into
-the 14–16 % anomaly band.*
+saw. Every bar is the seed-0 policy — the map-6 bar is its own mean over the ten canonical worlds, so
+the whole chart sits at one aggregation level. Map seed 3 is absent because the Week-2 generator could
+not calibrate its terrain exposure into the 14–16 % anomaly band.*
 
 **The canonical ordering reverses.** PPO and GRPO are statistically tied on map 6, and on all five
 held-out layouts the group-relative policy is ahead by 1,286 to 2,300, scoring above its own canonical
-result on three of them. PPO loses 21–50 % of its return off the training layout. DQN does not transfer
-at all, falling from 2,461 to between −316 and 539, and going negative on one layout.
+result — the seed-0 policy's 5,157 on the training layout — on four of them. PPO's seed-0 policy
+loses 2–38 % of its own canonical 5,170 off the training layout. DQN does not transfer at all: its
+seed-0 policy falls from 1,463 to between −316 and 539, going negative on one layout.
 
 The ordering follows from Figure 2. PPO's canonical advantage comes from alerting at 241 false alarms
 per 1,000 normal steps, which is a policy tuned to where the faults sit on this terrain. The
@@ -194,37 +198,45 @@ Building the node-level semi-MDP showed that two effects were being conflated.
 The main loop is 960 m over 8 edges and 9,600 steps. A sweep edge is 160 m, which is 1,700–1,900
 environment steps; only the 53 m connectors are ~600. The option Bellman backup carries `γᵏ` at that
 `k`, of order 10⁻⁸, so **a semi-MDP at γ = 0.99 optimises exactly the flat objective**. What the
-hierarchy shortens is the credit-assignment distance: the intra-option discounted return is +134.4 on
-a clean sweep edge against +116.6 where the blockage matters, while the undiscounted sums are 3,128 and
-3,127. That difference attaches to one backup where the flat learner propagates it through ~1,700.
+hierarchy shortens is the credit-assignment distance: whatever return differential an edge carries
+attaches to one backup where the flat learner propagates it through ~1,700 bootstrapped TD steps. The
+per-edge differential itself is measured small — pooled over the ten evaluation worlds a clean edge
+returns 133.1 in intra-option discounted return against 119.0 with a blockage ahead (1,564 against
+1,495 undiscounted), and conditioning on same-length sweep edges thins the sample to 14 against 6
+edges, inside which the contrast is not stable. The credit-assignment case therefore rests on the
+factorial below, not on the per-edge statistic.
 
 An option spans 600–1,900 environment steps, so 250k steps buy ~266 decisions and 1M buy ~1,060.
 Crossing budget with discount separates the two effects.
 
 ![Figure 6](image/W06_IRL_Hierarchical/hierarchy_factorial.png)
 
-*Figure 6 — Decision budget crossed with discount, five train seeds at 250k and three at 1M. Left:
-return with the spread across train seeds, against the hand-written option policy. Right: rerouting,
-against the best flat-MDP policy. Within each budget group the discount raises both quantities, and
-within each discount the larger budget does too. The error bars shrink from ±2,066 to ±141 across the
-grid, so the same two levers that move the mean also make the result reproducible.*
+*Figure 6 — Decision budget crossed with discount, five train seeds per arm. Left: return with the
+spread across train seeds, against the hand-written option policy. Right: rerouting, against the best
+flat-MDP policy. Within each budget group the discount raises both quantities, and within each
+discount the larger budget does too. At γ = 1.0 the seed spread narrows from ±586 to ±121 as the
+budget quadruples; at γ = 0.99 it stays wide at both budgets.*
 
-Both effects are real and close to additive. The discount is worth +1,232 at the small budget and
-+1,033 at the large one; the budget is worth +1,074 at γ = 0.99 and +875 at γ = 1.0. The discount
-effect surviving at four times the budget rules out a sample-efficiency artefact.
+Both effects are significant on the paired ten-world Wilcoxon test and close to additive. The
+discount is worth +1,232 at the small budget (`p = 0.014`) and +1,478 at the large one (`p = 0.002`);
+the budget is worth +608 at γ = 0.99 (`p = 0.027`) and +853 at γ = 1.0 (`p = 0.037`). The discount
+effect growing at four times the budget rules out a sample-efficiency artefact. The best arm's +1,276
+over the hand-written option policy is not significant (`p = 0.065`).
 
-**Rerouting separates the two cleanly.** Budget moves it by +0.09, the discount by +0.25, and both
-together reach 0.80, against 0.04–0.09 for DQN and 0.34 for the best flat policy. Rerouting is the
-decision whose consequence lies furthest ahead, so it is the behaviour most sensitive to the horizon.
+**Rerouting separates the two cleanly.** Budget moves it by +0.06 to +0.08, the discount by +0.25 to
++0.27, and both together reach 0.82, against 0.04–0.09 for DQN and 0.34 for the best flat policy.
+Rerouting is the decision whose consequence lies furthest ahead, so it is the behaviour most sensitive
+to the horizon.
 
-**The discount also collapses the seed spread.** At 250k the γ = 0.99 arm splits into two of five seeds
-at 7,560 and three above 11,000, a spread of ±2,066, while every γ = 1.0 seed lands between 10,528 and
-12,237 for ±586. Raising the budget then narrows it further, to ±141 at γ = 1.0 and 1M steps. Both
-levers therefore act on reliability as well as on the mean, and at γ = 1.0 the discount effect
-(+1,232 and +1,033) is larger than the remaining seed spread rather than buried inside it.
+**The discount collapses the seed spread; the budget does not.** At 250k the γ = 0.99 arm splits into
+two of five seeds at 7,560 and three above 11,000, a spread of ±2,066; at 1M one of five seeds still
+lands at 7,560, for ±1,679 — the bimodality survives four times the decision budget. Every γ = 1.0
+seed lands between 10,528 and 12,343, ±586 at 250k narrowing to ±121 at 1M. The discount therefore
+acts on reliability as well as on the mean, and its effect (+1,232 and +1,478) is larger than the
+γ = 1.0 seed spread rather than buried inside it.
 
 Two boundaries. The option controllers alert on the ground-truth label, so every option-level number
-belongs in the privileged bracket and none of these policies is deployable; the best arm's 12,151
+belongs in the privileged bracket and none of these policies is deployable; the best arm's 12,129
 should be read against the 11,575 ceiling. And the controllers embed the hand-written rule policy's
 competence, so a good score shows the binding constraint sat above the controller level.
 
@@ -273,14 +285,17 @@ The generating reward is known exactly and is linear in indicator features over
 `(label, action, halted, main_blocked, rough, soc < 20)`, so the recovery can be scored. Maximum-entropy
 IRL runs on a tabular discretisation of the logged expert (192 cells, 57 visited, 184 of 285
 state-action pairs supported), with soft value iteration converged to a Bellman residual of 10⁻⁹ at
-every gradient step. A linear reward is identifiable only up to a positive affine transformation, so
-correlations are reported after removing that freedom.
+every gradient step. A linear reward is identifiable only up to a positive affine transformation;
+Pearson and Spearman are invariant under that freedom, so the correlations are unaffected by the
+arbitrary scale, and the affine fit serves to place the recovered values on the true reward's scale in
+Figure 8 and to report what remains once the free scale and shift are spent.
 
 ![Figure 8](image/W06_IRL_Hierarchical/irl_recovery.png)
 
-*Figure 8 — Recovered reward against true reward. A linear reward is identifiable only up to a positive
-affine transformation, so the recovered values are rescaled onto the true reward's scale; exact
-recovery then lies on the dashed diagonal. The shaded band is the range the fit actually produces,
+*Figure 8 — Recovered reward against true reward. The recovered values are rescaled onto the true
+reward's scale by an unconstrained least-squares fit; exact recovery then lies on the dashed diagonal.
+For the observation-only panel the fitted display slope is negative — flagged on the panel — which is
+itself a statement of how little structure that fit recovered. The shaded band is the range the fit actually produces,
 against the range it was trying to reproduce. Left: the privileged fit tracks the diagonal weakly and
 compresses ten points of true reward into 3.7. Right: the observation-only fit spans 0.2, which is a
 constant for every state-action pair the expert took.*
@@ -321,8 +336,12 @@ the logged reward on 99.938 % of rows.
 ## 9. Multi-Agent Patrol
 
 The Week-2 design specified the mechanism: two `RoverWorld` instances on a shared map, each passed as
-the other's `dynamic_obstacles` so they see each other on LiDAR. That hook is used unchanged. Three
-gaps had to be closed in the wrapper.
+the other's `dynamic_obstacles` so they see each other on LiDAR. That hook is used unchanged. Four
+gaps had to be closed in the wrapper, the fourth of which changed the headline numbers: termination
+parity with the flat environment. Without the flat env's stuck-at-full-block timeout, a rover that
+committed onto a blocked edge stood halted to the horizon at −0.5 per step, and team returns came out
+at −2,522 and −2,386; restoring the timeout puts the same training configuration at +3,819 and
++3,840.
 
 ![Figure 9](image/W06_MultiAgent_RL/mutual_visibility.png)
 
@@ -352,15 +371,19 @@ state lives in the wrapper because `RoverWorld` has none.
 
 |                           | shared team reward | difference reward |
 | ------------------------- | ------------------ | ----------------- |
-| team return               | −2,522 ± 2,089   | −2,386 ± 1,741  |
-| loop coverage fraction    | 0.735 ± 0.012     | 0.735 ± 0.012    |
-| redundantly covered edges | 1.44               | 1.42              |
-| proximity-violation steps | 1,053              | 1,136             |
-| decisions per episode     | 5.4                | 5.4               |
+| team return               | 3,819 ± 434       | 3,840 ± 430      |
+| loop coverage fraction    | 0.735 ± 0.012     | 0.733 ± 0.015    |
+| redundantly covered edges | 1.30               | 1.18              |
+| proximity-violation steps | 6.4                | 6.4               |
+| decisions per episode     | 8.8                | 8.5               |
 
 The ± here is the spread across the five train seeds, matching every other table in this report. The
 per-episode spread within a seed is roughly twice as large again, because the ten evaluation worlds
-differ more than the seeds do.
+differ more than the seeds do. The proximity row is not read as a coordination signal: the half-loop
+starting phase on a shared-speed cycle keeps the rovers apart by construction, so the residual ~6
+steps per episode are transient encounters, and the only configuration that ever accumulated
+proximity — two rovers standing halted together at a blockage — is the one the stuck-timeout now
+terminates.
 
 ![Figure 10](image/W06_MultiAgent_RL/marl_curves.png)
 
@@ -370,12 +393,11 @@ after roughly 0.2M environment steps and never moves again.*
 
 The two credit-assignment schemes are indistinguishable on every coordination metric, and the coverage
 curve shows why: it reaches its final value within the first few updates and then stays there for the
-remaining 0.8M steps. An option spans roughly 1,200 environment steps, so a 9,600-step patrol contains
-~5.4 decisions per rover; 1M training steps buy ~560 decisions and, at 32 per rollout, ~17 policy
-updates. A difference reward is a
-counterfactual on an agent's contribution, and with 17 updates neither learner has a contribution to
-attribute. Coverage of 0.735 sits between random (0.425) and scripted (0.825), where a barely-trained
-learner should be.
+remaining 0.8M steps. An option spans roughly 900 environment steps here, so an episode of ~8,200
+steps contains ~8.8 decisions per rover; 1M training steps buy ~970 decisions and, at 32 per rollout,
+~30 policy updates. A difference reward is a counterfactual on an agent's contribution, and with 30
+updates neither learner has a contribution to attribute. Coverage of 0.735 sits between random (0.425)
+and scripted (0.825), where a barely-trained learner should be.
 
 This identifies the concrete obstacle for the CRL-MRS direction: at node granularity the coordination
 problem has a decision rate three orders of magnitude below its control rate. Progress needs an
@@ -401,13 +423,15 @@ Single-step inference, `timeit` over 2,000 calls, CPU, batch size 1.
 | behaviour-cloning MLP (2×128)               | 0.028        | PASS               | PASS              |
 | DQN (SB3, 2×64)                             | 0.066        | PASS               | PASS              |
 | PPO (SB3, 2×64)                             | 0.115        | PASS               | PASS              |
-| hierarchical, both levels in one step        | 0.002        | PASS               | PASS              |
-| two-rover, two forward passes per decision   | 0.030        | PASS               | PASS              |
+| hierarchical, both levels in one step        | 0.003        | PASS               | PASS              |
+| learned Q-table option selection (per node)  | 0.003        | PASS               | PASS              |
+| IRL policy, observation-only                 | 0.023        | PASS               | PASS              |
+| two-rover, two forward passes per decision   | 0.19         | PASS               | PASS              |
 
 Every learned policy clears both gates by three to five orders of magnitude, so the Phase-B conclusion
 carries over and the RL cost sits entirely in training. The two paths not already known are the
 hierarchical one, which runs a high-level selection roughly once a minute plus the 10 Hz controller,
-and the two-rover one, which doubles a figure already at 0.03 ms.
+and the two-rover one, which runs two forward passes per decision at 0.19 ms.
 
 ## 11. PIC 2.0 Connection
 
@@ -415,7 +439,7 @@ Week 5 argued a deployed policy class is judged on sample efficiency, stability 
 has a measurement.
 
 **Sample efficiency did not separate the methods.** Tripling DQN's budget changed nothing significant;
-quadrupling the option-level budget was worth about as much as fixing the discount. What separated
+quadrupling the option-level budget was worth less than fixing the discount. What separated
 methods was initialisation. On this task the PIC 2.0 configuration starting GRPO from an SFT
 checkpoint is what makes on-policy training viable at all.
 
@@ -433,8 +457,8 @@ of a constrained-RL penalty shaping the gradient.
 **Option controllers are privileged.** They alert on the ground-truth label, so §6's policies are not
 deployable. Sensor-window alerting would move those results into the deployable bracket.
 
-**The multi-agent result is data-limited.** At 5.4 decisions per episode the budget or the decision
-level has to change before the two schemes can be compared.
+**The multi-agent result is data-limited.** At ~9 decisions per episode and ~30 policy updates per
+1M steps, the budget or the decision level has to change before the two schemes can be compared.
 
 **Two ablations needed reconfiguration to be reachable**, and neither configuration is one a deployed
 rover would run: the low-SoC region needs a lowered dispatch charge, and the γ = 1.0 option arm relies
@@ -447,7 +471,7 @@ would need a new offline artifact and would break comparability with every Week-
 canonical layout without pinning the effect size to the precision the canonical numbers carry.
 
 For Week 7 the strongest lever is the **decision level**: the same environment, reward and observation
-give a policy that reroutes on 0.04 of blockages at 10 Hz and 0.80 at route-node rate. On the
+give a policy that reroutes on 0.04 of blockages at 10 Hz and 0.82 at route-node rate. On the
 cross-family Pareto that means inference latency alone is the wrong axis for RL policies, since every
 policy here sits three orders of magnitude inside the gate while the decision rate varies by three
 orders of magnitude. Layout-sweep evaluation also belongs in the standard column set, having reversed
