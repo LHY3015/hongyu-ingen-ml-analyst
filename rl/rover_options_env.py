@@ -34,8 +34,8 @@ Lengthening the horizon is a separate knob, and there are two honest settings:
 * a per-decision ``gamma_hi`` applied at option granularity, ignoring k. This is an approximation
   (it treats a 533-step connector and a 1,600-step sweep as equally long) but it is the only thing
   a fixed-gamma learner such as SB3 PPO can consume, and 1/(1 - 0.99) = 100 *decisions* is ~100
-  edges of horizon. `rl/train_options.py --learner ppo` takes this path; the default `smdp` learner
-  applies gamma^k exactly and needs `--gamma 1.0` to see past one edge.
+  edges of horizon. `python -m rl.harness.train --kind options --learner ppo` takes this path; the
+  default `smdp` learner applies gamma^k exactly and needs `--gamma 1.0` to see past one edge.
 
 Options
 -------
@@ -72,7 +72,7 @@ from gymnasium import spaces
 
 from shared_modules.rover_world import DT, V_CRUISE
 from rl.rover_env import RoverPatrolEnv, LOW_SOC, NEAR, ROUGH_TERRAIN_TORQUE, WINDOW
-from shared_modules.rl_eval import GAMMA, OBS_MEAN, OBS_STD, normalize
+from shared_modules.rl_eval import GAMMA, OBS_MEAN, OBS_STD, EVENT_KEYS, normalize
 
 OPT_PATROL, OPT_REROUTE, OPT_SLOW, OPT_DOCK = 0, 1, 2, 3
 OPTION_NAMES = {OPT_PATROL: 'patrol-edge', OPT_REROUTE: 'reroute-branch',
@@ -90,8 +90,15 @@ MAX_OPTION_STEPS = 4_000
 # cross the node satisfies this test before it executes.
 CROSS_EPS = V_CRUISE * DT
 
-EVENT_KEYS = ['anomaly', 'alert_on_anomaly', 'normal', 'alert_on_normal', 'single_block',
-              'reroute_on_block', 'rough', 'slow_on_rough', 'low_soc', 'dock']
+
+def about_to_cross(world):
+    """Whether the next world step consumes the node, which is where a reroute flag is read.
+
+    The 1e-9 slack covers the rounding accumulated over the ~1,600 `dist_into` additions of a
+    160 m sweep edge: without it the crossing step can land one ulp beyond the threshold and the
+    reroute is never emitted.
+    """
+    return (world.seg_len - world.dist_into) <= CROSS_EPS + 1e-9
 
 
 class RoverOptionsEnv(gym.Env):
@@ -131,15 +138,11 @@ class RoverOptionsEnv(gym.Env):
         self.raw_obs = np.asarray(raw, np.float64)
         return normalize(raw) if self.norm else np.asarray(raw, np.float32)
 
-    def _about_to_cross(self):
-        w = self.env.world
-        return (w.seg_len - w.dist_into) <= CROSS_EPS + 1e-9
-
     def _low_level(self, option):
         """Flat action for the current environment step under the running option."""
         if option == OPT_DOCK:
             return 4
-        if option == OPT_REROUTE and self._about_to_cross():
+        if option == OPT_REROUTE and about_to_cross(self.env.world):
             return 2
         if self.env._last_label == 1:
             return 3
@@ -173,7 +176,8 @@ class RoverOptionsEnv(gym.Env):
             a = self._low_level(option)
 
             # per-environment-step event counts, same keys and same pre-step conditioning as
-            # `w6_common.rollout`, so option-level rates are comparable with the flat table
+            # `shared_modules.rl_eval.rollout`, so option-level rates are comparable with the
+            # flat table
             if label == 1:
                 ev['anomaly'] += 1
                 ev['alert_on_anomaly'] += (a == 3)
@@ -222,10 +226,10 @@ class RoverOptionsEnv(gym.Env):
 
 
 def scripted_option_policy(obs_raw):
-    """Rule policy at option granularity -- `w6_common.scripted_blind` with the same thresholds,
-    re-expressed over the four options. Reroute is the choice when the main route ahead is blocked
-    and the branch is clear; with a full block there is nothing to route around, so it keeps
-    patrolling and lets the inner env's stuck timeout end the episode."""
+    """Rule policy at option granularity -- `shared_modules.rl_eval.scripted_blind` with the same
+    thresholds, re-expressed over the four options. Reroute is the choice when the main route ahead
+    is blocked and the branch is clear; with a full block there is nothing to route around, so it
+    keeps patrolling and lets the inner env's stuck timeout end the episode."""
     o = np.asarray(obs_raw, float)
     torque_mean, soc = o[0], o[5]
     main_d, branch_d = o[7], o[8]

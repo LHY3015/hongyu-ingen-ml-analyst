@@ -62,6 +62,7 @@ import argparse
 import json
 import sys
 import time
+import timeit
 
 import numpy as np
 import pandas as pd
@@ -74,26 +75,26 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 
 from shared_modules.rl_eval import (POL_DIR, ART_DIR, ROOT, GAMMA, TRAIN_CAP, FULL_LOOP,
-                                    W6_TIMESTEPS, EVAL_WORLD_SEEDS, OBS_MEAN, OBS_STD, normalize,
-                                    event_rates)
+                                    W6_TIMESTEPS, EVAL_WORLD_SEEDS, CURVE_SEEDS, OBS_MEAN,
+                                    OBS_STD, normalize, event_rates)
 from rl.rover_env import STATE_COLS, LOW_SOC, NEAR
-from rl.pg_algos import PGPolicy, reinforce, grpo, CURVE_SEEDS as PG_CURVE_SEEDS
+from rl.pg_algos import PGPolicy, reinforce, grpo
 from shared_modules.rover_world import LIDAR_MAX
 from rl.rover_options_env import RoverOptionsEnv, EVENT_KEYS, MAX_OPTION_STEPS
 from rl.rover_multiagent_env import RoverMultiAgentEnv, AGENTS, OPTION_NAMES
 
-CURVE_SEEDS = [101, 202, 303]      # mid-training learning-curve worlds (final eval uses all 10)
 N_OPTIONS = 4
 N_STATES = 12
 
 
 # === --kind flat (formerly rl/train_flat.py) ================================================
 def bc_pretrain_flat(model, epochs=40, device='cpu'):
-    """Supervised warm start of the PPO policy head on the Week-2 offline (s, a) pairs.
+    """Supervised warm start of the PPO actor on the Week-2 offline (s, a) pairs.
 
     The rover analogue of the SFT checkpoint that GRPO starts from in the PIC 2.0 configuration.
-    Only the action head is fitted; the value head stays random, which is what the caller's
-    critic-warmup phase then repairs before the policy is allowed to move.
+    The fit covers the actor trunk and the action head; the value head and its own trunk stay
+    random, which is what the caller's critic-warmup phase then repairs before the policy is
+    allowed to move.
     """
     df = pd.read_csv(ROOT / 'data' / 'rover_transitions.csv')
     X = normalize(df[[f's_{c}' for c in STATE_COLS]].to_numpy(np.float64))
@@ -187,6 +188,8 @@ def _main_flat(argv):
                 list(model.policy.action_net.parameters()):
             prm.requires_grad_(True)
 
+    # `reset_num_timesteps=False` keeps the warm-up on the same counter, so a bc-init arm spends
+    # `critic_warmup + steps` environment steps in total, not `steps`
     model.learn(a.steps, callback=cb, reset_num_timesteps=False, progress_bar=False)
     model.save(zip_path)
 
@@ -196,8 +199,9 @@ def _main_flat(argv):
         d = np.load(npz)
         curve = dict(timesteps=d['timesteps'].tolist(), results=d['results'].mean(1).tolist())
     meta = dict(tag=tag, algo=a.algo, seed=a.seed, steps=a.steps, gamma=a.gamma, norm=norm,
-                bc_init=a.bc_init, bc_acc=bc_acc, energy_weight=a.energy_weight,
-                low_soc_penalty=a.low_soc_penalty,
+                bc_init=a.bc_init, bc_acc=bc_acc,
+                bc_warmup_steps=(a.critic_warmup if a.bc_init else 0),
+                energy_weight=a.energy_weight, low_soc_penalty=a.low_soc_penalty,
                 soc_init_range=[a.soc_init_lo, a.soc_init_hi],
                 exploration_fraction=a.exploration_fraction,
                 minutes=round((time.time() - t0) / 60, 2), curve=curve)
@@ -207,7 +211,8 @@ def _main_flat(argv):
 
 # === --kind pg (formerly rl/train_pg.py) =====================================================
 def bc_pretrain_pg(policy, epochs=40, batch=512, lr=1e-3):
-    """Class-weighted supervised fit of the action head on the Week-2 offline (s, a) pairs.
+    """Class-weighted supervised fit of the policy trunk and action head on the Week-2 offline
+    (s, a) pairs; a value head, where the algorithm builds one, is left untouched.
 
     The five actions are wildly unbalanced in the scripted-expert table (continue dominates),
     so unweighted cross-entropy converges to a constant-`continue` policy that carries no prior
@@ -278,7 +283,7 @@ def _main_pg(argv):
 
     torch.save(policy.state_dict(), POL_DIR / f'{tag}.pt')
     meta = dict(tag=tag, algo=a.algo, seed=a.seed, steps=a.steps, gamma=GAMMA, norm=True,
-                bc_init=a.bc_init, bc_acc=bc_acc, curve_seeds=PG_CURVE_SEEDS, hyperparams=hp,
+                bc_init=a.bc_init, bc_acc=bc_acc, curve_seeds=CURVE_SEEDS, hyperparams=hp,
                 minutes=round((time.time() - t0) / 60, 2), curve=curve, updates=updates)
     meta_path.write_text(json.dumps(meta))
     print(f'{tag}: done in {meta["minutes"]} min, {len(updates)} updates, '
@@ -606,6 +611,17 @@ def run_episode(nets, env, world_seed=None, deterministic=True):
                 events={aid: roster[aid]['events'] for aid in roster})
 
 
+def measure_marl_latency(nets, obs_dim, n=1000):
+    """Cost of one joint decision: both rovers' independent forward passes, in ms.
+
+    Node-level decisions are what the site actually schedules, so the pair is timed together --
+    a per-rover number would understate the decision the operator waits on.
+    """
+    obs = np.zeros(obs_dim, dtype=np.float32)
+    f = lambda: [nets[aid].act(obs, deterministic=True) for aid in AGENTS]
+    return 1000.0 * timeit.timeit(f, number=n) / n
+
+
 def make_env(a, train):
     return RoverMultiAgentEnv(
         reward_mode=a.reward_mode, coverage_weight=a.coverage_weight,
@@ -714,7 +730,8 @@ def _main_marl(argv):
     ret_m, ret_s = agg('team_return')
     ev = event_rates([r['events'][aid] for r in rows for aid in AGENTS])
     evaluation = dict(
-        world_seeds=EVAL_WORLD_SEEDS, team_return_mean=ret_m, team_return_std=ret_s,
+        world_seeds=EVAL_WORLD_SEEDS, latency_ms=measure_marl_latency(nets, obs_dim),
+        team_return_mean=ret_m, team_return_std=ret_s,
         coverage_frac_mean=agg('coverage_frac')[0], coverage_frac_std=agg('coverage_frac')[1],
         redundant_edges_mean=agg('redundant_edges')[0],
         proximity_steps_mean=agg('proximity_steps')[0],

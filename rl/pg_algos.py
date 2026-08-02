@@ -21,8 +21,13 @@ what keeps the first REINFORCE updates from collapsing onto one action.
 **Group construction.** The G trajectories of an update must share a start state, otherwise
 the group mean is a baseline for a mixture of states and the "relative" part is meaningless.
 The rover env holds only numpy arrays and a `np.random.Generator`, so the start state is
-reached once and `copy.deepcopy` gives each group member an independent continuation of it;
+reached once and `copy.deepcopy` gives each group member a continuation of it;
 `assert_deepcopy_determinism` checks the copies replay bit-exactly before any training starts.
+The copy carries the world RNG state as well, so the members are *not* independent draws of the
+environment: they are common random numbers, and two members that emit the same action prefix
+see the same fault stream and the same sensor noise over it. The group therefore isolates the
+effect of the policy's own action sampling, and `group_return_std` understates the variance a
+policy's return has across independently seeded worlds.
 
 **Constant advantage.** `A_i` is broadcast unchanged to every timestep of trajectory `i`. That
 is the structural difference from PPO — no per-timestep, state-dependent baseline, hence no
@@ -55,10 +60,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from shared_modules.rl_eval import (GAMMA, TRAIN_CAP, make_train_env, make_eval_env, rollout,
-                          make_scripted_predict)
+from shared_modules.rl_eval import (GAMMA, TRAIN_CAP, CURVE_SEEDS, make_train_env, make_eval_env,
+                          rollout, make_scripted_predict)
 
-CURVE_SEEDS = [101, 202, 303]      # mid-training learning-curve worlds (final eval uses all 10)
 EVENT_SOC = 25.0                   # event-proximal search also accepts a near-flat battery
 
 
@@ -349,7 +353,8 @@ def grpo(seed, steps, group_size=8, segment_len=256, start_mix=0.5, kl_coef=0.02
             obs0, _ = env.reset()
             found, search = False, 0
 
-        # One start state, `group_size` independent continuations of it. The TimeLimit budget
+        # One start state, `group_size` continuations of it under common random numbers (see the
+        # module docstring on what the deepcopy does and does not vary). The TimeLimit budget
         # left at the start state is shared by all members, so a shortened segment shortens the
         # whole group and leaves the within-group comparison intact.
         ob, ac, rets, lens, raw = [], [], [], [], 0.0
@@ -422,11 +427,20 @@ def grpo(seed, steps, group_size=8, segment_len=256, start_mix=0.5, kl_coef=0.02
     return policy, updates, curve.as_dict()
 
 
-def load_policy_predict(path, obs_dim=9, n_actions=5):
-    """Greedy predict callable from a saved `PGPolicy` state_dict, for the evaluation pass."""
+def load_policy_net(path, obs_dim=9, n_actions=5):
+    """Reload a saved `PGPolicy` state_dict as the module itself, in eval mode.
+
+    The network rather than its `predict` closure, so logits and gradients with respect to the
+    observation stay reachable for input-attribution and value-landscape work.
+    """
     state = torch.load(path, map_location='cpu')
     net = PGPolicy(obs_dim=obs_dim, n_actions=n_actions,
                    with_value=any(k.startswith('v_trunk') for k in state))
     net.load_state_dict(state)
     net.eval()
-    return net.predict
+    return net
+
+
+def load_policy_predict(path, obs_dim=9, n_actions=5):
+    """Greedy predict callable from a saved `PGPolicy` state_dict, for the evaluation pass."""
+    return load_policy_net(path, obs_dim=obs_dim, n_actions=n_actions).predict

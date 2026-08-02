@@ -53,10 +53,12 @@ import numpy as np
 from gymnasium import spaces
 from pettingzoo import ParallelEnv
 
-from shared_modules.rover_world import RoverWorld, DT, V_CRUISE
+from shared_modules.rover_world import RoverWorld
 from rl.rover_env import (WINDOW, MAP_SEED, HAZARD, NEAR, LOW_SOC, ROUGH_TERRAIN_TORQUE,
-                          FULL_LOOP_STEPS, STATE_COLS, extract_state, compute_reward)
-from shared_modules.rl_eval import normalize, TRAIN_CAP, FULL_LOOP
+                          STUCK_TIMEOUT, FULL_LOOP_STEPS, STATE_COLS, extract_state,
+                          compute_reward)
+from rl.rover_options_env import about_to_cross
+from shared_modules.rl_eval import normalize, TRAIN_CAP, FULL_LOOP, EVENT_KEYS
 
 ROVER_RADIUS = 0.6              # m, LiDAR circle each rover presents to the other
 MAX_OPTION_STEPS = 3_500        # stall guard: 160 m (longest main edge) at 0.5 m/s = 3,200 steps
@@ -68,9 +70,6 @@ I_SOC = STATE_COLS.index('battery_soc')
 I_TORQUE = STATE_COLS.index('torque_mean')
 I_MAIN = STATE_COLS.index('next_main_block_dist')
 I_BRANCH = STATE_COLS.index('branch_block_dist')
-
-EVENT_KEYS = ['anomaly', 'alert_on_anomaly', 'normal', 'alert_on_normal', 'single_block',
-              'reroute_on_block', 'rough', 'slow_on_rough', 'low_soc', 'dock']
 
 
 class _RoverAgent:
@@ -91,6 +90,7 @@ class _RoverAgent:
         self.terminated = False
         self.term_reason = None
         self.halted_steps = 0
+        self.stuck_ctr = 0
         self.anomaly_steps = 0
         self.events = {k: 0 for k in EVENT_KEYS}
 
@@ -312,7 +312,7 @@ class RoverMultiAgentEnv(ParallelEnv):
     def _flat_action(self, a, opt):
         if opt == 1:
             # the core consumes the reroute flag on the step that crosses the node
-            return 2 if (a.world.seg_len - a.world.dist_into) <= V_CRUISE * DT else 0
+            return 2 if about_to_cross(a.world) else 0
         return {0: 0, 2: 1, 3: 4}[opt]
 
     # -- coverage bookkeeping -------------------------------------------------------------
@@ -368,10 +368,17 @@ class RoverMultiAgentEnv(ParallelEnv):
                 if a.terminated:
                     continue
                 a.cache()
+                # same stuck-at-full-block condition and timeout as the flat env: a rover
+                # committed onto a blocked edge cannot reroute out of it, and would otherwise
+                # stand still paying -0.5/step to the horizon
+                a.stuck_ctr = (a.stuck_ctr + 1
+                               if (a.halted and a.main_blocked and a.branch_blocked) else 0)
                 if flat.get(aid) == 4:
                     a.terminated, a.term_reason, ctrl[aid]['done'] = True, 'dock', True
                 elif a.soc <= 0.0:
                     a.terminated, a.term_reason, ctrl[aid]['done'] = True, 'soc_depleted', True
+                elif a.stuck_ctr >= STUCK_TIMEOUT:
+                    a.terminated, a.term_reason, ctrl[aid]['done'] = True, 'stuck_timeout', True
                 elif ctrl[aid]['n'] >= self.max_option_steps:
                     ctrl[aid]['done'] = True
 
@@ -412,10 +419,10 @@ class RoverMultiAgentEnv(ParallelEnv):
 
     # -- reporting ------------------------------------------------------------------------
     def _count_event(self, aid, opt):
-        """Decision-level event-conditioned counters, mirroring `w6_common.rollout`.
+        """Decision-level event-conditioned counters, mirroring `shared_modules.rl_eval.rollout`.
 
         No option emits flat action 3, so the alert counters are structurally zero; they are kept
-        so the dict pools straight into `w6_common.event_rates`.
+        so the dict pools straight into `shared_modules.rl_eval.event_rates`.
         """
         a, e = self.ag[aid], self.ag[aid].events
         if a.label == 1:

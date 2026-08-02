@@ -140,7 +140,7 @@ MODULES['options_long'] = 'rl.harness.train'
 KINDS['flat_bcinit'] = 'flat'
 KINDS['options_long'] = 'options'
 # The `--steps` these carry in their own argument list overrides the sweep default.
-SWEEP_SEEDS = {'options_long': 3}
+SWEEP_SEEDS = {'options_long': 5}
 
 if __name__ == '__main__':
     which = sys.argv[1] if len(sys.argv) > 1 else 'flat'

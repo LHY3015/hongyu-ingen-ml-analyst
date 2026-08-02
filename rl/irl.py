@@ -458,9 +458,9 @@ def _write(path, out):
 def make_predict(result, mdp):
     """Greedy policy under the recovered reward, as a callable on a raw 9-D observation.
 
-    Accepts `(obs)` or `(obs, base)` so it drops into `w6_common.rollout` either way, but the
-    `priv` policy needs the second argument: `result['feature_set'] == 'priv'` is the case that
-    must be evaluated with `env_aware=True`, since its cell includes the ground-truth label.
+    Accepts `(obs)` or `(obs, base)` so it drops into `shared_modules.rl_eval.rollout` either way,
+    but the `priv` policy needs the second argument: `result['feature_set'] == 'priv'` is the case
+    that must be evaluated with `env_aware=True`, since its cell includes the ground-truth label.
     """
     P, gamma = mdp['P'], mdp['gamma']
     _, Q, _, _ = hard_value_iteration(np.asarray(result['reward']), P, gamma)

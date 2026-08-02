@@ -42,7 +42,7 @@ from shared_modules.rl_eval import (POL_DIR, ART_DIR, ROOT, N_TRAIN_SEEDS, evalu
                                     verify_w5_reference_gate, EVAL_WORLD_SEEDS, CROSS_MAP_SEEDS,
                                     FULL_LOOP)
 from rl.rover_env import STATE_COLS
-from rl.rover_options_env import RoverOptionsEnv, make_scripted_option_predict
+from rl.rover_options_env import RoverOptionsEnv, make_scripted_option_predict, OPT_REROUTE
 
 # === --mode one (formerly rl/eval_one.py) ====================================================
 # Which env kwargs each family was trained under; evaluation must match, or the low-SoC families
@@ -142,6 +142,23 @@ def load_table_policy(tag, seed):
     return make_q_predict(np.load(path)['q'], norm=True)
 
 
+def measure_option_latency(predict, env_kw):
+    """Both levels of the hierarchical decision path, in ms.
+
+    A deployed option policy pays the high-level lookup once per node and the option controller
+    on every 10 Hz tick, so the step the latency gate has to clear is the one where both fire.
+    The controller is timed on `reroute-branch`, its longest branch (the crossing test as well as
+    the alert and rough-terrain tests).
+    """
+    env = RoverOptionsEnv(randomize_reset=False, seed=EVAL_WORLD_SEEDS[0], **env_kw)
+    env.reset()
+    high = measure_latency(predict)
+    low = 1000.0 * timeit.timeit(lambda: env._low_level(OPT_REROUTE), number=5000) / 5000
+    env.close()
+    return dict(latency_high_level_ms=high, latency_low_level_ms=low,
+                latency_ms=high + low)
+
+
 def _main_options(argv):
     from rl.harness.train import evaluate_options, rollout_options
 
@@ -168,16 +185,21 @@ def _main_options(argv):
         s['soc_depleted_rate'] = float(np.mean([r == 'soc_depleted' for r in reasons]))
         s['stuck_rate'] = float(np.mean([r == 'stuck_timeout' for r in reasons]))
         s['low_soc_steps'] = float(np.mean([r['low_soc'] for r in rows]))
+        # per-world returns, kept so a paired test over the ten common worlds can be run from the
+        # artefact rather than only from the aggregate
+        s['per_world'] = [float(r['ret']) for r in rows]
         return s
 
     if a.tag == 'scripted_option':
-        summaries, seeds = [one(make_scripted_option_predict())], [0]
+        first = make_scripted_option_predict()
+        summaries, seeds = [one(first)], [0]
     else:
-        summaries, seeds = [], []
+        summaries, seeds, first = [], [], None
         for s in range(a.seeds):
             predict = load_table_policy(a.tag, s)
             if predict is None:
                 continue
+            first = first or predict
             summaries.append(one(predict))
             seeds.append(s)
     if not summaries:
@@ -196,7 +218,9 @@ def _main_options(argv):
     if len(per_seed) > 1:
         agg['return_std'] = float(np.std(per_seed))
     out = dict(tag=a.tag, n_train_seeds=len(summaries), seeds=seeds,
-               per_seed_return=per_seed, **agg)
+               per_seed_return=per_seed, world_seeds=EVAL_WORLD_SEEDS,
+               per_seed_per_world=[s['per_world'] for s in summaries],
+               **measure_option_latency(first, env_kw), **agg)
     (ART_DIR / f'evalopt_{a.tag}.json').write_text(json.dumps(out))
     print(f"{a.tag}: return {agg['return_mean']:.0f} "
           f"P(reroute|block) {agg.get('p_reroute_block')} "
@@ -247,13 +271,33 @@ def measure_latency(predict, n=2000):
     return 1000.0 * timeit.timeit(lambda: predict(obs), number=n) / n
 
 
+def family_kind(tag):
+    """Which environment a family's checkpoints act on, read from the run's own meta JSON.
+
+    Deciding this from the tag would be wrong for any tag that does not carry its environment in
+    its name -- the options trainer's documented example is `opt_ppo`, whose checkpoint is a
+    4-action SB3 zip that the flat fan-out below would happily score on the 5-action flat env.
+    Returns None for a checkpoint with no meta, which is how the Week-5 runs present.
+    """
+    metas = sorted(ART_DIR.glob(f'{tag}_s[0-9]_meta.json'))
+    if not metas:
+        return None
+    m = json.loads(metas[0].read_text())
+    if 'learner' in m:                  # --kind options writes the high-level learner name
+        return 'options'
+    if m.get('algo') == 'ippo' or 'reward_mode' in m:
+        return 'marl'
+    return 'flat'
+
+
 def discover_families():
     """All Week-6 families, plus the Week-5 canonical DQN so the budget comparison is paired."""
     tags = {f.stem.rsplit('_s', 1)[0] for f in POL_DIR.glob('*_s[0-9].zip')}
     tags |= {f.stem.rsplit('_s', 1)[0] for f in POL_DIR.glob('*_s[0-9].pt')}
-    # `marl_*` and `options_*` act on different environments and are evaluated by `--mode options`
-    # and the multi-agent trainer's own evaluation block, not by the flat-env fan-out here.
-    keep = {t for t in tags if not t.startswith(('smoke', 'dqn_ew', 'marl_', 'options_'))}
+    # options and multi-agent families act on different environments and are evaluated by
+    # `--mode options` and the multi-agent trainer's own evaluation block, not by the flat-env
+    # fan-out here.
+    keep = {t for t in tags if not t.startswith('smoke') and family_kind(t) == 'flat'}
     if 'dqn_ew0.05' in tags:
         keep.add('dqn_ew0.05')          # Week-5 80k canonical run, the budget-comparison arm
     return sorted(keep)
@@ -341,6 +385,9 @@ def _main_all(argv):
 
     out = {}
     rng = np.random.default_rng(0)
+    # the random floor samples the four non-terminating actions: uniform over all five draws
+    # `return-to-base` within a few steps, so the episode ends before the policy is a floor for
+    # anything
     for name, predict, aware in [('random', lambda o: rng.integers(0, 4), False),
                                  ('scripted_blind', make_scripted_predict(), False),
                                  ('bc_offline', train_bc(), False),

@@ -24,7 +24,8 @@ import pandas as pd
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 
-from rl.rover_env import RoverPatrolEnv, ACTION_NAMES, STATE_COLS, NEAR, ROUGH_TERRAIN_TORQUE
+from rl.rover_env import (RoverPatrolEnv, ACTION_NAMES, STATE_COLS, NEAR, ROUGH_TERRAIN_TORQUE,
+                          LOW_SOC, STUCK_TIMEOUT)
 
 ROOT = Path(__file__).resolve().parents[1]
 POL_DIR = ROOT / 'rl' / 'saved_policies'
@@ -44,6 +45,12 @@ EVAL_WORLD_SEEDS = [0, 1, 2, 3, 4, 101, 202, 303, 404, 505]
 W5_EVAL_SEEDS = [0, 1, 2, 3, 4]
 CROSS_MAP_SEEDS = [1, 2, 4, 5, 7]   # W02-validated layouts other than the canonical MAP_SEED=6
 N_TRAIN_SEEDS = 5
+CURVE_SEEDS = [101, 202, 303]      # mid-training learning-curve worlds (final eval uses all 10)
+
+# Event-conditioned counters. Defined once here because the flat rollout, the options env and the
+# multi-agent env all pool their counts through `event_rates`, which indexes this exact key list.
+EVENT_KEYS = ['anomaly', 'alert_on_anomaly', 'normal', 'alert_on_normal', 'single_block',
+              'reroute_on_block', 'rough', 'slow_on_rough', 'low_soc', 'dock']
 
 
 # --- observation normalisation ------------------------------------------------------------
@@ -93,11 +100,29 @@ def make_eval_env(world_seed, norm=True, horizon=FULL_LOOP, **kw):
 
 
 # --- evaluation ---------------------------------------------------------------------------
-def rollout(predict, env, gamma=None, env_aware=False):
+def _obs_is_normalized(env):
+    """Whether the wrapper chain rescales the observation, so a raw copy can be recovered."""
+    while isinstance(env, gym.Wrapper):
+        if isinstance(env, NormalizeObs):
+            return True
+        env = env.env
+    return False
+
+
+TRACE_KEYS = ['obs_raw', 'obs_norm', 'action', 'reward', 'label', 'halted', 'main_blocked',
+              'branch_blocked', 'rough', 'soc']
+
+
+def rollout(predict, env, gamma=None, env_aware=False, record=False):
     """Run one deterministic episode. Returns total return, length and event-conditioned counts.
 
     `env_aware` calls `predict(obs, base)` instead of `predict(obs)`, which is how the privileged
     label-aware expert reference reads the ground-truth anomaly label the observation withholds.
+
+    `record` additionally returns `(stats, trace)`, a dict of per-step arrays: the observation in
+    both frames (raw physical units and the rescaling the policy is actually fed), the action, the
+    reward, and the state flags the event counters condition on. Input-gradient and value-landscape
+    work needs the per-step trajectory, and re-implementing this loop is how the two drift apart.
     """
     obs, info = env.reset()
     if hasattr(predict, 'reset'):
@@ -105,8 +130,9 @@ def rollout(predict, env, gamma=None, env_aware=False):
     base = env.unwrapped
     total, disc, n, g = 0.0, 0.0, 0, 1.0
     acts = np.zeros(5, int)
-    ev = dict(anomaly=0, alert_on_anomaly=0, normal=0, alert_on_normal=0,
-              single_block=0, reroute_on_block=0, rough=0, slow_on_rough=0, low_soc=0, dock=0)
+    ev = {k: 0 for k in EVENT_KEYS}
+    tr = {k: [] for k in TRACE_KEYS}
+    normed = _obs_is_normalized(env)
     while True:
         label = base._last_label
         main_b, branch_b, rough = base._main_blocked, base._branch_blocked, base._rough
@@ -125,26 +151,40 @@ def rollout(predict, env, gamma=None, env_aware=False):
         if rough:
             ev['rough'] += 1
             ev['slow_on_rough'] += (a == 1)
-        if soc < 20.0:
+        if soc < LOW_SOC:
             ev['low_soc'] += 1
             ev['dock'] += (a == 4)
+        if record:
+            o = np.asarray(obs, np.float64)
+            tr['obs_raw'].append(o * OBS_STD + OBS_MEAN if normed else o)
+            tr['obs_norm'].append(normalize(o) if not normed else o)
+            tr['action'].append(a)
+            tr['label'].append(label)
+            tr['halted'].append(base._halted)
+            tr['main_blocked'].append(main_b)
+            tr['branch_blocked'].append(branch_b)
+            tr['rough'].append(rough)
+            tr['soc'].append(soc)
         obs, r, term, trunc, info = env.step(a)
         total += r
         disc += g * r
         g *= (gamma or GAMMA)
         n += 1
+        if record:
+            tr['reward'].append(r)
         if term or trunc:
             break
-    return dict(ret=total, disc_ret=disc, length=n, ret_per_step=total / n,
-                terminal_soc=soc, actions=acts,
-                terminated_reason=info.get('terminated_reason'), **ev)
+    stats = dict(ret=total, disc_ret=disc, length=n, ret_per_step=total / n,
+                 terminal_soc=soc, actions=acts,
+                 terminated_reason=info.get('terminated_reason'), **ev)
+    if record:
+        return stats, {k: np.asarray(v) for k, v in tr.items()}
+    return stats
 
 
 def event_rates(rows):
     """Aggregate `rollout` dicts into the Week-6 headline event-conditioned rates."""
-    s = {k: sum(r[k] for r in rows) for k in
-         ['anomaly', 'alert_on_anomaly', 'normal', 'alert_on_normal', 'single_block',
-          'reroute_on_block', 'rough', 'slow_on_rough', 'low_soc', 'dock']}
+    s = {k: sum(r[k] for r in rows) for k in EVENT_KEYS}
     d = lambda a, b: (s[a] / s[b]) if s[b] else np.nan
     return dict(p_alert_anomaly=d('alert_on_anomaly', 'anomaly'),
                 false_alerts_per_1k=1000 * d('alert_on_normal', 'normal'),
@@ -189,9 +229,6 @@ def paired_test(a, b):
 # floor and ceiling. They are stateful: the stuck counter makes the policy abort a full-block dead
 # end rather than alert into it indefinitely, which is why the label-blind rule policy shows ~1
 # false alert per 1k normal steps and not two orders of magnitude more.
-from rl.rover_env import LOW_SOC, STUCK_TIMEOUT
-
-
 class ScriptedBlind:
     """Deployable rule policy: observation only, so it navigates but never alerts on a fault."""
 
