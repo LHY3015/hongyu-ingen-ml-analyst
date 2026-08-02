@@ -1,0 +1,644 @@
+{
+  "fari/mlp": {
+    "config": {
+      "activation": "relu",
+      "batch_size": 128,
+      "best_epoch": 18,
+      "device": "cuda",
+      "dropout": 0.3,
+      "epochs_run": 28,
+      "hidden": [
+        16,
+        8
+      ],
+      "in_dim": 5,
+      "lr": 0.001,
+      "max_epochs": 100,
+      "optimizer": "adam",
+      "patience": 10,
+      "seed": 42,
+      "split": "stratified 70/15/15"
+    },
+    "file": "fari/mlp.pt",
+    "file_bytes": 4133,
+    "metrics": {
+      "confusion_matrix": [
+        137,
+        86,
+        37,
+        190
+      ],
+      "test_auc": 0.8228995871278719,
+      "test_f1": 0.7554671968190855,
+      "test_f1_default": 0.7505422993492408,
+      "test_precision": 0.6884057971014492,
+      "test_recall": 0.8370044052863436
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "fari/mlp_scaler.joblib",
+    "threshold": 0.3999999999999999,
+    "verification": [
+      {
+        "abs_delta": 1.1102230246251565e-16,
+        "achieved": 0.3999999999999999,
+        "metric": "threshold",
+        "target": 0.4
+      },
+      {
+        "abs_delta": 3.280318091447576e-05,
+        "achieved": 0.7554671968190855,
+        "metric": "test_f1",
+        "target": 0.7555
+      },
+      {
+        "abs_delta": 4.128721280416414e-07,
+        "achieved": 0.8228995871278719,
+        "metric": "test_auc",
+        "target": 0.8229
+      }
+    ]
+  },
+  "fari/rf": {
+    "config": {
+      "class_weight": "balanced",
+      "cv_best_f1": 0.733958576426986,
+      "max_depth": 5,
+      "n_estimators": 100,
+      "seed": 42,
+      "split": "stratified 70/15/15"
+    },
+    "file": "fari/rf.joblib",
+    "file_bytes": 539929,
+    "metrics": {
+      "confusion_matrix": [
+        134,
+        89,
+        35,
+        192
+      ],
+      "test_auc": 0.8077477726635192,
+      "test_f1": 0.7559055118110236,
+      "test_f1_default": 0.7584745762711864,
+      "test_precision": 0.6832740213523132,
+      "test_recall": 0.8458149779735683
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "fari/rf_scaler.joblib",
+    "threshold": 0.42999999999999994,
+    "verification": [
+      {
+        "abs_delta": 5.551115123125783e-17,
+        "achieved": 0.42999999999999994,
+        "metric": "threshold",
+        "target": 0.43
+      },
+      {
+        "abs_delta": 5.5118110235952145e-06,
+        "achieved": 0.7559055118110236,
+        "metric": "test_f1",
+        "target": 0.7559
+      },
+      {
+        "abs_delta": 4.777266351918552e-05,
+        "achieved": 0.8077477726635192,
+        "metric": "test_auc",
+        "target": 0.8077
+      }
+    ]
+  },
+  "rover/cnn": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 10,
+      "device": "cuda",
+      "dropout": 0.3,
+      "epochs_run": 20,
+      "in_channels": 11,
+      "input_layout": "(batch, channel, time)",
+      "lr": 0.01,
+      "max_epochs": 100,
+      "momentum": 0.9,
+      "optimizer": "sgd_momentum",
+      "patience": 10,
+      "pool": "concat",
+      "seed": 42,
+      "window": 50
+    },
+    "file": "rover/cnn.pt",
+    "file_bytes": 49621,
+    "metrics": {
+      "confusion_matrix": [
+        1481,
+        116,
+        79,
+        225
+      ],
+      "test_auc": 0.9586848696569226,
+      "test_f1": 0.6976744186046512,
+      "test_f1_default": 0.6941015089163237,
+      "test_precision": 0.6598240469208211,
+      "test_recall": 0.7401315789473685
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "rover/cnn_scaler.joblib",
+    "threshold": 0.73,
+    "verification": [
+      {
+        "abs_delta": 0.050000000000000044,
+        "achieved": 0.73,
+        "metric": "threshold",
+        "target": 0.78
+      },
+      {
+        "abs_delta": 0.034025581395348836,
+        "achieved": 0.6976744186046512,
+        "metric": "test_f1",
+        "target": 0.7317
+      },
+      {
+        "abs_delta": 0.0001848696569225483,
+        "achieved": 0.9586848696569226,
+        "metric": "test_auc",
+        "target": 0.9585
+      }
+    ]
+  },
+  "rover/gru": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 5,
+      "device": "cuda",
+      "dropout": 0.3,
+      "epochs_run": 15,
+      "hidden_size": 64,
+      "input_layout": "(batch, time, channel)",
+      "input_size": 11,
+      "lr": 0.001,
+      "max_epochs": 100,
+      "optimizer": "adam",
+      "patience": 10,
+      "rnn_type": "gru",
+      "seed": 42,
+      "window": 50
+    },
+    "file": "rover/gru.pt",
+    "file_bytes": 62333,
+    "metrics": {
+      "confusion_matrix": [
+        1535,
+        62,
+        88,
+        216
+      ],
+      "test_auc": 0.9732619549813797,
+      "test_f1": 0.7422680412371134,
+      "test_f1_default": 0.74,
+      "test_precision": 0.7769784172661871,
+      "test_recall": 0.7105263157894737
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "rover/gru_scaler.joblib",
+    "threshold": 0.6499999999999999,
+    "verification": [
+      {
+        "abs_delta": 1.1102230246251565e-16,
+        "achieved": 0.6499999999999999,
+        "metric": "threshold",
+        "target": 0.65
+      },
+      {
+        "abs_delta": 3.195876288653032e-05,
+        "achieved": 0.7422680412371134,
+        "metric": "test_f1",
+        "target": 0.7423
+      },
+      {
+        "abs_delta": 3.8045018620369575e-05,
+        "achieved": 0.9732619549813797,
+        "metric": "test_auc",
+        "target": 0.9733
+      }
+    ]
+  },
+  "rover/lstm": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 2,
+      "device": "cuda",
+      "dropout": 0.3,
+      "epochs_run": 12,
+      "hidden_size": 64,
+      "input_layout": "(batch, time, channel)",
+      "input_size": 11,
+      "lr": 0.001,
+      "max_epochs": 100,
+      "optimizer": "adam",
+      "patience": 10,
+      "rnn_type": "lstm",
+      "seed": 42,
+      "window": 50
+    },
+    "file": "rover/lstm.pt",
+    "file_bytes": 82054,
+    "metrics": {
+      "confusion_matrix": [
+        1474,
+        123,
+        87,
+        217
+      ],
+      "test_auc": 0.9610392017928353,
+      "test_f1": 0.6739130434782609,
+      "test_f1_default": 0.6739130434782609,
+      "test_precision": 0.638235294117647,
+      "test_recall": 0.7138157894736842
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "rover/lstm_scaler.joblib",
+    "threshold": 0.48999999999999994,
+    "verification": [
+      {
+        "abs_delta": 5.551115123125783e-17,
+        "achieved": 0.48999999999999994,
+        "metric": "threshold",
+        "target": 0.49
+      },
+      {
+        "abs_delta": 1.3043478260810204e-05,
+        "achieved": 0.6739130434782609,
+        "metric": "test_f1",
+        "target": 0.6739
+      },
+      {
+        "abs_delta": 3.920179283534164e-05,
+        "achieved": 0.9610392017928353,
+        "metric": "test_auc",
+        "target": 0.961
+      }
+    ]
+  },
+  "rover/mlp": {
+    "config": {
+      "activation": "relu",
+      "batch_size": 128,
+      "best_epoch": 2,
+      "device": "cuda",
+      "dropout": 0.3,
+      "epochs_run": 12,
+      "hidden": [
+        64,
+        32
+      ],
+      "in_dim": 40,
+      "lr": 0.01,
+      "max_epochs": 100,
+      "momentum": 0.9,
+      "optimizer": "sgd_momentum",
+      "patience": 10,
+      "seed": 42
+    },
+    "file": "rover/mlp.pt",
+    "file_bytes": 22181,
+    "metrics": {
+      "confusion_matrix": [
+        1578,
+        19,
+        116,
+        188
+      ],
+      "test_auc": 0.9676737633061991,
+      "test_f1": 0.735812133072407,
+      "test_f1_default": 0.740608228980322,
+      "test_precision": 0.9082125603864735,
+      "test_recall": 0.618421052631579
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "rover/mlp_scaler.joblib",
+    "threshold": 0.7599999999999999,
+    "verification": [
+      {
+        "abs_delta": 1.1102230246251565e-16,
+        "achieved": 0.7599999999999999,
+        "metric": "threshold",
+        "target": 0.76
+      },
+      {
+        "abs_delta": 1.2133072406994572e-05,
+        "achieved": 0.735812133072407,
+        "metric": "test_f1",
+        "target": 0.7358
+      },
+      {
+        "abs_delta": 2.623669380086291e-05,
+        "achieved": 0.9676737633061991,
+        "metric": "test_auc",
+        "target": 0.9677
+      }
+    ]
+  },
+  "rover/rf": {
+    "config": {
+      "class_weight": "balanced",
+      "cv_best_f1": 0.7493551141634132,
+      "max_depth": 10,
+      "n_estimators": 200,
+      "pca_components_retained": 19,
+      "pca_n_components": 0.95,
+      "seed": 42,
+      "threshold_grid": [
+        0.1,
+        0.9,
+        81
+      ]
+    },
+    "file": "rover/rf.joblib",
+    "file_bytes": 5506594,
+    "metrics": {
+      "confusion_matrix": [
+        1530,
+        67,
+        88,
+        216
+      ],
+      "test_auc": 0.9667777576376759,
+      "test_f1": 0.7359454855195912,
+      "test_f1_default": 0.7350427350427351,
+      "test_precision": 0.7632508833922261,
+      "test_recall": 0.7105263157894737
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": null,
+    "threshold": 0.49,
+    "verification": [
+      {
+        "abs_delta": 0.0,
+        "achieved": 0.49,
+        "metric": "threshold",
+        "target": 0.49
+      },
+      {
+        "abs_delta": 4.548551959115965e-05,
+        "achieved": 0.7359454855195912,
+        "metric": "test_f1",
+        "target": 0.7359
+      },
+      {
+        "abs_delta": 2.224236232406529e-05,
+        "achieved": 0.9667777576376759,
+        "metric": "test_auc",
+        "target": 0.9668
+      }
+    ]
+  },
+  "rover/transformer": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 18,
+      "d_model": 64,
+      "device": "cuda",
+      "dim_feedforward": 128,
+      "dropout": 0.1,
+      "epochs_run": 28,
+      "input_layout": "(batch, time, channel)",
+      "input_size": 11,
+      "lr": 0.001,
+      "max_epochs": 100,
+      "max_len": 50,
+      "nhead": 4,
+      "num_layers": 2,
+      "optimizer": "adam",
+      "patience": 10,
+      "seed": 42,
+      "window": 50
+    },
+    "file": "rover/transformer.pt",
+    "file_bytes": 296280,
+    "metrics": {
+      "confusion_matrix": [
+        1587,
+        10,
+        104,
+        200
+      ],
+      "test_auc": 0.9861417789935076,
+      "test_f1": 0.7782101167315175,
+      "test_f1_default": 0.7969639468690702,
+      "test_precision": 0.9523809523809523,
+      "test_recall": 0.6578947368421053
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "rover/transformer_scaler.joblib",
+    "threshold": 0.8699999999999999,
+    "verification": [
+      {
+        "abs_delta": 1.1102230246251565e-16,
+        "achieved": 0.8699999999999999,
+        "metric": "threshold",
+        "target": 0.87
+      },
+      {
+        "abs_delta": 1.0116731517517685e-05,
+        "achieved": 0.7782101167315175,
+        "metric": "test_f1",
+        "target": 0.7782
+      },
+      {
+        "abs_delta": 4.177899350765735e-05,
+        "achieved": 0.9861417789935076,
+        "metric": "test_auc",
+        "target": 0.9861
+      }
+    ]
+  },
+  "trajectory/cv": {
+    "config": {
+      "dt": 0.1,
+      "n_fut": 5,
+      "n_hist": 10,
+      "n_params": 0,
+      "rule": "last measured velocity carried forward from the last measured pose"
+    },
+    "file": null,
+    "file_bytes": 0,
+    "metrics": {
+      "mean_cm": 2.7684368764477307,
+      "per_horizon_cm": [
+        1.8392115620521579,
+        2.0301478710705254,
+        2.4741155975220193,
+        3.223598259281498,
+        4.275111092312455
+      ]
+    },
+    "round_trip_max_abs_diff": null,
+    "scaler_file": null,
+    "threshold": null,
+    "verification": [
+      {
+        "abs_delta": 0.00043687644773093837,
+        "achieved": 2.7684368764477307,
+        "metric": "mean_cm",
+        "target": 2.768
+      }
+    ]
+  },
+  "trajectory/linear": {
+    "config": {
+      "fit": "closed form",
+      "input": "flattened standardised 10x8 history",
+      "n_params": 810
+    },
+    "file": "trajectory/linear.joblib",
+    "file_bytes": 4127,
+    "metrics": {
+      "mean_cm": 1.5044763088226318,
+      "per_horizon_cm": [
+        0.7251555323600769,
+        0.9788957238197327,
+        1.3657580614089966,
+        1.8910679817199707,
+        2.56150484085083
+      ]
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "trajectory/linear_scaler.joblib",
+    "threshold": null,
+    "verification": [
+      {
+        "abs_delta": 0.0004763088226318324,
+        "achieved": 1.5044763088226318,
+        "metric": "mean_cm",
+        "target": 1.504
+      }
+    ]
+  },
+  "trajectory/lstm": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 59,
+      "device": "cuda",
+      "epochs_run": 69,
+      "hidden": 64,
+      "loss": "mse",
+      "lr": 0.001,
+      "max_epochs": 100,
+      "n_feat": 8,
+      "n_fut": 5,
+      "n_params": 19594,
+      "optimizer": "adam",
+      "patience": 10,
+      "seed": 42
+    },
+    "file": "trajectory/lstm.pt",
+    "file_bytes": 80966,
+    "metrics": {
+      "mean_cm": 1.452204942703247,
+      "per_horizon_cm": [
+        0.9224939346313477,
+        1.064602017402649,
+        1.3303388357162476,
+        1.7203307151794434,
+        2.2232587337493896
+      ]
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "trajectory/lstm_scaler.joblib",
+    "threshold": null,
+    "verification": [
+      {
+        "abs_delta": 0.0022049427032471147,
+        "achieved": 1.452204942703247,
+        "metric": "mean_cm",
+        "target": 1.45
+      }
+    ]
+  },
+  "trajectory/mlp": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 54,
+      "device": "cuda",
+      "dropout": 0.1,
+      "epochs_run": 64,
+      "loss": "mse",
+      "lr": 0.001,
+      "max_epochs": 100,
+      "n_feat": 8,
+      "n_fut": 5,
+      "n_hist": 10,
+      "n_params": 19274,
+      "optimizer": "adam",
+      "patience": 10,
+      "seed": 42
+    },
+    "file": "trajectory/mlp.pt",
+    "file_bytes": 80165,
+    "metrics": {
+      "mean_cm": 1.613698124885559,
+      "per_horizon_cm": [
+        1.0763523578643799,
+        1.2064731121063232,
+        1.450851321220398,
+        1.91140878200531,
+        2.4234063625335693
+      ]
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "trajectory/mlp_scaler.joblib",
+    "threshold": null,
+    "verification": [
+      {
+        "abs_delta": 0.0036981248855589843,
+        "achieved": 1.613698124885559,
+        "metric": "mean_cm",
+        "target": 1.61
+      }
+    ]
+  },
+  "trajectory/transformer": {
+    "config": {
+      "batch_size": 128,
+      "best_epoch": 47,
+      "d_model": 64,
+      "device": "cuda",
+      "dim_feedforward": 128,
+      "dropout": 0.1,
+      "epochs_run": 57,
+      "loss": "mse",
+      "lr": 0.001,
+      "max_epochs": 100,
+      "n_feat": 8,
+      "n_fut": 5,
+      "n_hist": 10,
+      "n_params": 84738,
+      "nhead": 4,
+      "num_layers": 2,
+      "optimizer": "adam",
+      "patience": 10,
+      "seed": 42
+    },
+    "file": "trajectory/transformer.pt",
+    "file_bytes": 355295,
+    "metrics": {
+      "mean_cm": 1.7932316064834595,
+      "per_horizon_cm": [
+        1.4019521474838257,
+        1.4605770111083984,
+        1.643068552017212,
+        1.982346534729004,
+        2.478215456008911
+      ]
+    },
+    "round_trip_max_abs_diff": 0.0,
+    "scaler_file": "trajectory/transformer_scaler.joblib",
+    "threshold": null,
+    "verification": [
+      {
+        "abs_delta": 0.003231606483459437,
+        "achieved": 1.7932316064834595,
+        "metric": "mean_cm",
+        "target": 1.79
+      }
+    ]
+  }
+}

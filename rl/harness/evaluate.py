@@ -233,11 +233,12 @@ RESULTS = ART_DIR / 'w6_eval.json'
 MAX_PAR = 10
 
 
-def train_bc(device='cpu', seed=42):
+def train_bc(device='cpu', seed=42, return_net=False):
     """Retrain the Week-5 behaviour-cloning policy on the Week-2 table (it was never saved).
 
     Seeded so the offline reference is the same number on every evaluation pass; without it the
     bracket moves by ~15 return between runs and the paired tests against it are not reproducible.
+    `return_net=True` additionally returns the network itself, for gradient-based attribution.
     """
     import torch.nn as nn
     torch.manual_seed(seed)
@@ -263,7 +264,7 @@ def train_bc(device='cpu', seed=42):
     def predict(obs):
         with torch.no_grad():
             return int(net(torch.as_tensor(obs, dtype=torch.float32, device=device)[None]).argmax())
-    return predict
+    return (predict, net) if return_net else predict
 
 
 def measure_latency(predict, n=2000):
