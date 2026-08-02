@@ -25,7 +25,9 @@
 - **Cross-family Pareto + optimisation** (`W07_Pareto_and_Optimisation.ipynb`): one latency
   convention re-measured from checkpoints, three per-platform panels, the full 15-pair
   significance matrix deferred from Week 3, and the RF depth/width reduction.
-- Reports: `W07_Methodology_Report.md`, `W07_PIC20_ML_Analysis.md`.
+- Reports: `W07_Explainability_Pareto_Report.md` (the findings report — every figure and the full
+  argument live there; the notebooks produce code, data and images), `W07_Methodology_Report.md`,
+  `W07_PIC20_ML_Analysis.md`.
 
 ## Results
 
@@ -93,5 +95,6 @@ calibration problem is cross-block transfer (the threshold swings), not marginal
 - `notebooks/W07_Pareto_and_Optimisation.ipynb` — latency convention, three panels, significance
   matrix, RF reduction; `data/pareto_points.csv`
 - `data/senpai_learner_state.csv`
-- `reports/W07_Methodology_Report.md`, `reports/W07_PIC20_ML_Analysis.md`
+- `reports/W07_Explainability_Pareto_Report.md`, `reports/W07_Methodology_Report.md`,
+  `reports/W07_PIC20_ML_Analysis.md`
 - Week-6 review corrections across `rl/`, `shared_modules/`, the W06 notebooks, report and log
