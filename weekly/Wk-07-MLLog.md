@@ -80,7 +80,10 @@ deployment recommendation; Humanoid frontier {CV, Linear, MLP, LSTM} with the Tr
 dominated by LSTM; patrol frontier {REINFORCE+baseline, PPO} with DQN below the deployable floor
 and the Week-6 layout caveat attached. The RF reduction lands at 50 trees × depth 6: F1
 0.7359 → 0.7153 (−0.021, inside the ±0.048 fold spread), 9.07 → 2.52 ms, SHAP top-5 unchanged —
-from 91 % of the ≤10 ms breach-detection tier to 25 %.
+from 91 % of the ≤10 ms breach-detection tier to 25 %. Calibration against the STUM target: the
+MLP's on-distribution ECE is 0.025 — under the deployed 0.031 benchmark with no calibration layer —
+and the Transformer's 0.041 drops to 0.032 with validation-fitted temperature scaling; the open
+calibration problem is cross-block transfer (the threshold swings), not marginal reliability.
 
 ## Deliverables Completed
 

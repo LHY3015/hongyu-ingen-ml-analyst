@@ -17,7 +17,7 @@ engineering documents; experimental numbers come from this repo's ledgers.
 | GRPO | warm start is the precondition; training-layout leaderboards select the wrong policy | 3 |
 | SEOM | training-time penalties deliver the safety property in full (depletion 26 % → 0) | 3 |
 | HTD-IRL | reward recovery is bounded by demonstrations; hierarchy effects significant | 3 |
-| STUM | discrimination is stable, calibration is not (thresholds swing 0.36–0.95) | 2 |
+| STUM | on-distribution ECE already meets the target (MLP 0.025 < benchmark 0.031); the risk is calibration transfer | 3 |
 | AMDC | cross-channel engineered features carry the attribution mass in every model family | 2 |
 | CRL-MRS | node-level coordination has ~30 updates per 1M steps to learn from — a structural null | 1 |
 
@@ -99,25 +99,26 @@ result into the deployable bracket and directly prototypes the class's leaf-node
 
 ## STUM — Spatiotemporal Uncertainty Model
 
-**Finding.** The project's evidence is about the inputs a STUM would consume: probabilistic scores
-whose discrimination is stable and whose calibration is not. Across the seven fold rotations every
-Rover model holds AUC within ~0.03 while val-tuned decision thresholds swing 0.36–0.95; the 1D-CNN
-adds a hardware dimension — its threshold-dependent F1 varies ±0.03 across identically-seeded runs
-from cuDNN nondeterminism alone, while AUC moves ±0.001. A class whose product behaviour switches
-at fixed σ thresholds (0.25/0.65 tiers, ECE target < 0.10) inherits exactly this gap: ranking
-quality transfers, operating points do not.
+**Finding.** Measured on the canonical test fold, the two score producers a STUM would sit on
+already meet the class's ECE < 0.10 target on-distribution: the MLP at 0.025 — under the deployed
+0.031 benchmark with no calibration layer at all — and the Transformer at 0.041, improved to 0.032
+by validation-fitted temperature scaling (T = 1.16; the MLP's T = 1.07 is near-inert). The risk
+the project's other evidence exposes is calibration *transfer*: across the seven fold rotations
+every model holds AUC within ~0.03 while val-tuned operating thresholds swing 0.36–0.95, and the
+1D-CNN's threshold-dependent F1 varies ±0.03 from cuDNN nondeterminism alone while AUC moves
+±0.001. A class whose product behaviour switches at fixed σ thresholds (0.25/0.65 tiers) inherits
+that gap: marginal reliability is fine, operating points do not travel between blocks.
 
-**Methodology.** Report discrimination and calibration as separate quantities; per-site threshold
-calibration as a deployment step, not a training artifact; calibration error (ECE) alongside AUC
-for any score a downstream rule consumes.
+**Methodology.** Report discrimination and calibration as separate quantities; ECE alongside AUC
+for any score a downstream rule consumes; per-site threshold calibration as a deployment step, not
+a training artifact.
 
-**Readiness: 2.** No calibration model was trained in this project; the evidence characterises the
-problem the class exists to solve rather than the class itself.
+**Readiness: 3.** The on-distribution half of the class's requirement is measured and met; what is
+uncharacterised is the between-site half, which the threshold swings say is the binding one.
 
-**Priority experiment.** Measure ECE for the Rover MLP and Transformer scores against the class's
-< 0.10 target (the deployed benchmark is 0.031), then temperature-scale on the validation fold and
-re-measure — the minimal end-to-end test of whether a lightweight calibration layer meets the
-product target on this data.
+**Priority experiment.** Cross-fold calibration transfer: fit the calibration layer on one fold
+rotation and measure ECE on the other six — the direct test of whether a σ threshold set at one
+site is trustworthy at the next, which is how the product deploys.
 
 ## AMDC — Adaptive Multi-Domain Calibration
 
