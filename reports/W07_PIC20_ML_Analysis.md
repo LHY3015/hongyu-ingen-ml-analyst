@@ -1,4 +1,4 @@
-Hongyu LIU
+Hongyu LIU  
 InGen Dynamics - ML & NN Analyst Intern, August 2026
 
 ---
@@ -9,15 +9,16 @@ InGen Dynamics - ML & NN Analyst Intern, August 2026
 project produced (Weeks 1–7: classical/NN/sequence baselines, transformer and trajectory models,
 value-based and policy-gradient RL, IRL/hierarchical, multi-agent). Readiness is a 1–5 statement of
 how much validated evidence exists for deploying that class on InGen platforms — a score for the
-evidence, not for the idea. Config parameters quoted for each class come from the platform
-engineering documents; experimental numbers come from this repo's ledgers.
+evidence, not for the idea. Config parameters quoted for each class come from the public Origami
+architecture page and the platform engineering documents, the public page authoritative where they
+differ; experimental numbers come from this repo's ledgers.
 
 | class | anchor result from this project | readiness |
 | --- | --- | --- |
 | GRPO | warm start is the precondition; training-layout leaderboards select the wrong policy | 3 |
 | SEOM | training-time penalties deliver the safety property in full (depletion 26 % → 0) | 3 |
 | HTD-IRL | reward recovery is bounded by demonstrations; hierarchy effects significant | 3 |
-| STUM | on-distribution ECE already meets the target (MLP 0.025 < benchmark 0.031); the risk is calibration transfer | 3 |
+| STUM | the deployment-recommended MLP already meets the internal ECE target (0.025 vs 0.031); the risk is calibration transfer | 3 |
 | AMDC | cross-channel engineered features carry the attribution mass in every model family | 2 |
 | CRL-MRS | node-level coordination has ~30 updates per 1M steps to learn from — a structural null | 1 |
 
@@ -49,7 +50,7 @@ layout-robust selection at scale: the held-out sweep used one train seed per fam
 held-out-layout return as the selection metric; on the product side this is the difference between
 a curriculum policy that works for the pilot cohort and one that works for the next school.
 
-## SEOM — Safety-Embedded Objective Model
+## SEOM — Self-Supervised Ethical Oversight Mechanism
 
 **Finding.** Two independent constraint-through-objective results behave exactly as the class
 specifies. The per-step low-SoC penalty eliminates battery depletion entirely (26 % of episodes to
@@ -65,9 +66,9 @@ training reset distribution, which is the class's central methodological trap: a
 never fires in training is untested, not satisfied.
 
 **Readiness: 3.** The mechanism is validated twice with clean effect sizes. Missing for higher: a
-λ sweep (the docs specify 3.5–8.0 per platform) mapping the safety-return frontier, and any
-evidence on rule *sets* (the products run 10–12 concurrent rules; this project tested one at a
-time).
+λ sweep mapping the safety-return frontier — the product line spans λ = 5.0 to 10.0, Rover at 5.0
+and Fari eldercare at 10.0 — and any evidence on rule *sets* (the products run 10–12 concurrent
+rules per platform, 46 in total; this project tested one at a time).
 
 **Priority experiment.** The λ sweep on the low-SoC term, reporting the depletion-rate/return
 frontier — the direct analogue of tuning force-gate strictness on Humanoid/Senpai.
@@ -81,9 +82,9 @@ soft-optimal demonstrator with the same code — identifiability is a property o
 not the fitter, and a near-deterministic expert (the product plan's 800 inspection demos will be
 one) leaves the reward under-identified while still supporting a strong policy (11,285 against an
 11,575 ceiling). Hierarchy: raising the decision level from 10 Hz to route nodes moves rerouting
-from 0.34 to 0.82, with both factorial effects — credit-assignment distance and discount horizon —
-individually significant (`p = 0.014–0.002` and `0.027–0.037`) and the discount also collapsing
-seed spread (±586 → ±121 at 1M steps). The caveat that bounds deployment claims: the option
+from 0.34 to 0.82, with both factorial effects individually significant — the discount horizon at
+`p = 0.014/0.002` (250k/1M) and the decision budget at `p = 0.027/0.037` (γ = 0.99/1.0) — and the
+discount also collapsing seed spread (±586 → ±121 at 1M steps). The caveat that bounds deployment claims: the option
 controllers are privileged, so the hierarchy results live in the non-deployable bracket.
 
 **Methodology.** Score IRL against known rewards wherever a simulator exists (the positive-control
@@ -99,22 +100,25 @@ result into the deployable bracket and directly prototypes the class's leaf-node
 
 ## STUM — Spatiotemporal Uncertainty Model
 
-**Finding.** Measured on the canonical test fold, the two score producers a STUM would sit on
-already meet the class's ECE < 0.10 target on-distribution: the MLP at 0.025 — under the deployed
-0.031 benchmark with no calibration layer at all — and the Transformer at 0.041, improved to 0.032
-by validation-fitted temperature scaling (T = 1.16; the MLP's T = 1.07 is near-inert). The risk
+**Finding.** Measured on the canonical test fold against the class's internal calibration target
+of ECE 0.031: the deployment-recommended MLP meets it with no calibration layer at all (0.025 raw),
+while the Transformer misses it raw (0.041) and lands just above it after validation-fitted
+temperature scaling (0.032, T = 1.16; the MLP's T = 1.07 is near-inert) — the target is tight
+enough to separate the two score producers this project has. The risk
 the project's other evidence exposes is calibration *transfer*: across the seven fold rotations
 every model holds AUC within ~0.03 while val-tuned operating thresholds swing 0.36–0.95, and the
 1D-CNN's threshold-dependent F1 varies ±0.03 from cuDNN nondeterminism alone while AUC moves
-±0.001. A class whose product behaviour switches at fixed σ thresholds (0.25/0.65 tiers) inherits
-that gap: marginal reliability is fine, operating points do not travel between blocks.
+±0.001. A class whose product behaviour switches at fixed σ thresholds — autonomous below 0.30,
+cautious to 0.60, human escalation above it — inherits that gap: marginal reliability is fine,
+operating points do not travel between blocks.
 
 **Methodology.** Report discrimination and calibration as separate quantities; ECE alongside AUC
 for any score a downstream rule consumes; per-site threshold calibration as a deployment step, not
 a training artifact.
 
-**Readiness: 3.** The on-distribution half of the class's requirement is measured and met; what is
-uncharacterised is the between-site half, which the threshold swings say is the binding one.
+**Readiness: 3.** The on-distribution half of the class's requirement is measured — and met by the
+deployment-recommended model; what is uncharacterised is the between-site half, which the threshold
+swings say is the binding one.
 
 **Priority experiment.** Cross-fold calibration transfer: fit the calibration layer on one fold
 rotation and measure ECE on the other six — the direct test of whether a σ threshold set at one
@@ -138,7 +142,7 @@ engineered channels the models actually consume, and invest calibration effort t
 recalibration (`c_k` at 100 Hz) was tested on this data.
 
 **Priority experiment.** Drift injection: perturb per-sensor gain/offset in the world core at
-documented drift magnitudes (thermal coefficient 0.08 %/°C), measure F1 degradation with and
+documented drift magnitudes (thermal drift 0.08 °C per °C of ambient), measure F1 degradation with and
 without a recalibration step, and check whether SHAP attributions shift — a direct test of whether
 the features the models depend on are the ones drift attacks.
 
@@ -159,8 +163,8 @@ distinguish them (decisions and updates per run are now recorded in every meta);
 coordination as coverage/redundancy against random and scripted brackets.
 
 **Readiness: 1.** The class's central question — does structured credit assignment beat a shared
-reward — is untested at any budget where it could show. The fleet-scale claims (3–12 robots) are
-untouched.
+reward — is untested at any budget where it could show. The fleet-scale claims (3–12 robots on
+Rover, up to 47 on Sentinel) are untouched.
 
 **Priority experiment.** Insert a decision level between 10 Hz and route nodes (e.g. 100-step
 macro-actions) or raise the interaction budget by an order of magnitude, then re-run

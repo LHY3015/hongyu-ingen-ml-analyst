@@ -1,10 +1,10 @@
-Hongyu LIU
+Hongyu LIU  
 InGen Dynamics - ML & NN Analyst Intern, August 2026
 
 ---
 
-**Platform:** all platforms — explainability & deployment · full PIC 2.0
-**Protocol:** every attribution runs on a refit model verified against its published metrics; canonical block split for Rover, 70/15/15 stratified for Fari/Senpai, ten-world Week-6 protocol for RL
+**Platform:** all platforms — explainability & deployment · full PIC 2.0  
+**Protocol:** every attribution runs on a refit model verified against its published metrics; canonical block split for Rover, 70/15/15 stratified for Fari/Senpai, ten-world Week-6 protocol for RL  
 **Deployment gates:** Aido Rover ≤100 ms (≤10 ms breach tier in §8) · Aido Humanoid ≤50 ms · Fari ≤35 ms · Senpai ≤100 ms
 
 ## 1. Overview
@@ -14,22 +14,21 @@ and evaluation protocols — together with what Week 7's explainability and depl
 The classical family is RandomForest alone (one model, a deliberate reduction of the plan's five),
 and every "classical" claim is scoped to it. Five findings carry the week.
 
-| finding                                                        | evidence                                                                                     |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| One feature story spans every model family                     | cross-channel `inter_wheel_std` leads RF components, MLP 40-D SHAP, and (as `torque_max`) the RL alert head (§4, §6) |
-| The stuck-type misses are not localisation failures            | in a fully missed fault episode, 100 % of windows have attention on the fault span, median 8.7× (§5) |
-| RL fine-tuning is feature reallocation                         | PPO concentrates 42–46 % of gradient on `torque_max` and drops the blockage distance the BC prior watched (§6) |
-| The frontier confirms the Week-3 defaults                      | classification frontier {MLP, Transformer}, Transformer ≈ MLP (`p = 0.34`); trajectory {…, LSTM}; patrol {REINFORCE+baseline, PPO} (§8) |
-| A model that cannot be refit bit-identically is a finding      | the 1D-CNN's F1 spans 0.683–0.738 across identical runs from cuDNN nondeterminism alone (§7) |
+| finding                                             | evidence                                                                                                                                     |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| One feature story spans every model family          | cross-channel`inter_wheel_std` leads RF components, MLP 40-D SHAP, and (as `torque_max`) the RL alert head (§4, §6)                    |
+| The stuck-type misses are not localisation failures | in a fully missed fault episode, 100 % of windows have attention on the fault span, median 8.7× (§5)                                       |
+| RL fine-tuning is feature reallocation              | PPO concentrates 42–46 % of gradient on`torque_max` and drops the blockage distance the BC prior watched (§6)                            |
+| The frontier confirms the Week-3 defaults           | classification frontier {MLP, Transformer}, Transformer ≈ MLP (`p = 0.34`); trajectory {…, LSTM}; patrol {REINFORCE+baseline, PPO} (§8) |
+| A model that cannot be refit bit-identically        | the 1D-CNN's F1 spans 0.683–0.738 across identical runs from cuDNN nondeterminism alone (§7)                                               |
 
 ## 2. Data and Preprocessing
 
 **One dynamics core, two consumers.** All Rover data — the offline 9-channel sensor stream and the
 online RL environments — comes from a single world-dynamics module (`shared_modules/rover_world.py`).
 The Week-5 environment passes a bit-exact replay gate against the Week-2 offline table, so offline
-and online results are about the same physics, not two implementations that resemble each other.
-Sensor ranges, fault mechanisms and the 85/15 normal/anomaly calibration are set from the platform
-documents, and the label is withheld from every deployable model's observation.
+and online results are about the same physics.
+Sensor ranges, fault mechanisms and the 85/15 normal/anomaly calibration are set from the plan, and the label is withheld from every deployable model's observation.
 
 **Feature space.** The tabular models consume a 40-dimensional matrix built by one shared function
 (`shared_modules/features.py`): 9 raw channels with absolute GPS replaced by per-step deltas, 25 FFT
@@ -52,7 +51,7 @@ each). Every classification and sequence model in the project reads this one ass
 **Fari.** 3,000 independent rows (5 features, binary label from a known generative weight vector),
 split 70/15/15 stratified — row independence is what makes the plain split leakage-safe there.
 
-**Senpai, built this week.** Senpai had no dataset anywhere, and its product documents carry design
+**Senpai.** Senpai had no dataset anywhere, and its product documents carry design
 parameters but no measured data, so the 2,000 × 5 three-class task is generated under a
 fixed-difficulty IRT-3PL assessment scenario: the documents specify the 3PL response model and an
 adaptive 57–69 % success band — which would make `correct_rate` level-invariant under tutoring,
@@ -130,18 +129,34 @@ mean-|SHAP| ranking; orange bars are the Week-2 MDI selection.*
 PC7, PC17), and the full 19-component rank correlation between MDI and mean-|SHAP| is Spearman
 0.919 (`p = 3×10⁻⁸`). The Week-2 methodology caveat — MDI is biased toward high-variance features,
 and PCA components mix sensors — could have made that selection a method artifact; on this model it
-is not. Week 2 documented loadings for PC1–PC5 only, so the three high-index selected components
-are resolved here from the fitted PCA:
+is not, and the selection itself is the evidence. MDI's bias and PCA's variance ordering point the
+same way, so an artifact of the two would have produced PC1–PC5; the actual set skips PC3–PC6 and
+PC8–PC11 to reach components carrying 2.1 % and 1.4 % of the variance, and a second attribution
+method with no impurity bias — computed from held-out predictions rather than training-time splits
+— independently reproduces that out-of-order set.
 
-| component | top loadings (signed)                                                                     |
-| --------- | ------------------------------------------------------------------------------------------ |
-| PC7       | `inter_wheel_std_roll_max` +.43 · `inter_wheel_std_roll_mean` +.42 · `inter_wheel_std` +.37 · `gps_dlat` +.24 |
-| PC12      | `inter_wheel_std` +.48 · `gps_dlat` −.39 · torque `dom_freq` terms                          |
-| PC17      | `inter_wheel_std` +.51 · `torque_3_dom_freq` −.45 · `torque_2_bandwidth` +.43               |
+Week 2 documented loadings for PC1–PC5 only, so the three high-index selected components are
+resolved here from the fitted PCA. Each component is a unit vector over the 40 standardised
+features, so 1/√40 ≈ 0.16 is what an evenly spread component would put on each:
 
-All three are dominated by the engineered cross-channel dispersion features. With PC1/PC2 carrying
-the torque spectral centroids and `stall_ratio`, the five selected components tell one story: the
-classical model's usable signal concentrates in the features Week-2 engineering added.
+| component | variance | top loadings (signed)                                                                                                    |
+| --------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| PC7       | 3.34 %   | `inter_wheel_std_roll_max` +.43 · `inter_wheel_std_roll_mean` +.42 · `inter_wheel_std` +.37 · `gps_dlat` +.24 |
+| PC12      | 2.05 %   | `inter_wheel_std` +.48 · `gps_dlat` −.39 · torque `dom_freq` terms                                              |
+| PC17      | 1.39 %   | `inter_wheel_std` +.51 · `torque_3_dom_freq` −.45 · `torque_2_bandwidth` +.43                                   |
+
+All three are dominated by the engineered cross-channel dispersion features, and PC12 shows the
+mechanism: `inter_wheel_std` and `gps_dlat` enter with opposite signs, so the component is a
+contrast — wheel torques disagreeing while the rover barely advances, which is the mechanical
+definition of a stuck or slipping wheel. With PC1/PC2 carrying the torque spectral centroids and
+`stall_ratio`, the five selected components tell one story: the classical model's usable signal
+concentrates in the features Week-2 engineering added.
+
+**Variance ordering is not relevance ordering**, and here the gap is quantifiable: PC12 and PC17
+carry 2.1 % and 1.4 % of the variance yet rank third and fifth in both attributions. The pipeline
+keeps 19 components at a 0.95 variance threshold; at 0.90 it would keep 16 and discard PC17
+outright. A variance-based reduction placed ahead of a supervised task can drop the directions that
+task most depends on, so the retention threshold is a modelling decision rather than a formality.
 
 **The MLP, in its native space.** The MLP consumes the standardised 40-D matrix directly
 (bit-identical to the RF pipeline's input space), so DeepExplainer attributes over named features
@@ -226,11 +241,12 @@ detection outcome, coloured by fault episode. The 99 eligible windows tile only 
 episodes — one 90 % detected (blue), one missed entirely (orange) — so the two groups are very
 nearly the two episodes.*
 
-The sample structure kills any detected-vs-missed ranking (n = 2 episodes; the window-level medians
-7.0 vs 8.7 compare episode identity, not populations). What stands is the one-sided claim: **in the
+The sample structure kills any detected-vs-missed ranking: consecutive windows share 49 of their 50
+rows, so the 99 points are not 99 independent samples, and behind them sit only two fault episodes
+— the window-level medians 7.0 vs 8.7 compare episode identity, not populations. What stands is the one-sided claim: **in the
 fully missed episode, every one of the 49 windows has attention selectivity above 1 (median 8.7×)
-while the classification head calls all of them normal.** The encoder finds the fault span and the
-head discards it. The stuck-type recall ceiling is a property of the decision head under the
+while the classification head calls all of them normal.** **The encoder finds the fault span and the
+head discards it.** The stuck-type recall ceiling is a property of the decision head under the
 training distribution, not of the encoder — which is where a Week-8 fix should start.
 
 ## 6. RL Evaluation and What the Policy Reads
@@ -253,7 +269,12 @@ tie that every held-out layout decides the other way.
 state it stands in, and the sensitivity of its action logits to each observation channel. Both are
 read on the Week-6 deployable leader (PPO 250k, BC-init, seed 0) against the BC prior it was tuned
 from; both reproduce their published world-0 returns to the digit before attribution, and the
-analysis runs on one canonical episode — it explains a policy, it does not rank policies.
+analysis runs on one canonical episode — it explains a policy, it does not rank policies. Two
+measurement choices make the saliency legible. Gradients are taken on the *normalised* observation:
+the raw vector mixes torque in Nm with LiDAR metres and SoC per cent, so a raw-space gradient would
+rank channels by their units rather than by their influence. And they are reported as a
+within-policy share, because the two networks differ in size and logit scale — only the shape of
+the attribution is comparable across them, not the height of the bars.
 
 ![Figure 9](image/W07_Explainability/rl_value_trace.png)
 
@@ -279,11 +300,20 @@ prior. Gradients are taken at each policy's own greedy action on the normalised 
 **Fine-tuning reallocated attention in one direction.** BC keeps a standing dual sensitivity —
 `torque_max` and `next_main_block_dist` carry comparable gradient in every condition (27 %/27 % on
 normal patrol) — while PPO concentrates on `torque_max` (46 % normal, 42 % anomaly) and leaves the
-blockage distance under 9 % except when a blockage is already in sensor range. That is the
+blockage distance under 9 % until a blockage is already inside sensor range, where it recovers to
+23 % (third panel). PPO has not stopped reading that channel; it has stopped reading it *early*,
+and lead time is exactly what a detour decision needs. That is the
 attribution-level form of the Week-6 behaviour trade (reroute 0.84 → 0.34, false alarms 55 → 241):
 PPO's updates grew the alert pathway, which pays on every anomaly step, and let the navigation
 pathway inherited from BC atrophy. The two policies choose the same greedy action on only 61.7 %
 of trace steps — the fine-tuned policy is not a sharpened copy of its prior.
+
+**Figure 10 cannot see the alert head.** It differentiates whichever action the policy actually
+took, and on a normal patrol step that action is `continue`, so the heads that decide the rare
+events are barely exercised in it. The next view fixes the logit instead of following the choice —
+the `raise-alert` logit scored on anomaly steps, the `reroute` logit on blockage-approach steps,
+each head examined on the condition it exists for whether or not the policy fires it there. Within
+one network the two heads share a logit scale, so these bars are absolute rather than shares.
 
 ![Figure 11](image/W07_Explainability/rl_saliency_per_action.png)
 
@@ -327,8 +357,8 @@ per-run seeds, configs and curves in JSON metas.
 ## 8. Deployment Feasibility — Pareto, Optimisation, Calibration
 
 **One latency convention.** Recorded latencies came from different weeks on different machine
-states (the same MLP measures 0.135 ms in Week 3 and 0.027 ms now; the full RandomForest 7.86 ms
-and 9.07 ms), so every family is re-measured from the verified checkpoints under one convention —
+states (the same MLP measures 0.135 ms in Week 3 and 0.041 ms now; the full RandomForest 7.86 ms
+and 8.96 ms), so every family is re-measured from the verified checkpoints under one convention —
 single observation, CPU, `timeit` over 2,000 calls, including each model's own preprocessing. No
 ranking flips under re-measurement. Scores are not commensurable across tasks (F1, cm error,
 patrol return), so each platform task gets its own latency–score panel; the RL score is the
@@ -341,9 +371,9 @@ floor–ceiling normalised return, privileged policies excluded; the assembled t
 non-dominated; dashed lines are the platform gates.*
 
 **Aido Rover classification: frontier {MLP, Transformer}.** Every other model is dominated —
-RandomForest doubly so, 25–320× slower than the neural models at mid-pack F1. With §3's
+RandomForest doubly so, 13–220× slower than the neural models at mid-pack F1. With §3's
 significance matrix, the top is one equivalence class {Transformer, MLP} and the axes decide
-inside it: the MLP is 12.6× faster. **Deployment recommendation: MLP**, Transformer as the
+inside it: the MLP is 8.5× faster. **Deployment recommendation: MLP**, Transformer as the
 interpretability alternate.
 
 **Aido Humanoid trajectory: frontier {CV, Linear, MLP, LSTM}.** The axes trade smoothly from the
@@ -361,25 +391,31 @@ model choice on these tasks; it does not constrain it.
 **Optimisation under a met constraint.** Nothing misses its gate, so the optimisation experiment
 targets the two real framings: cost — the RF is the portfolio's slowest model, and inference cost
 is battery on a patrol robot — and the Aido Rover's ≤10 ms breach-detection tier, where the full
-forest measures 9.1 ms this week, consuming ~91 % of the budget: one machine-state fluctuation
-from failing it.
+forest consumes ~87 % of the budget. That headroom is thinner than one measurement suggests: the
+same 200-tree forest measures 8.96 ms in the Pareto cell and 8.73 ms in the reduction cell of the
+same notebook, so the distance to the tier is about the width of the run-to-run spread.
 
 ![Figure 13](image/W07_Pareto_and_Optimisation/rf_reduction.png)
 
-*Figure 13 — Test F1 against latency for depth/width-reduced forests; the dashed line is the 10 ms
-breach tier.*
+*Figure 13 — Test F1 against latency for eight depth/width-reduced forests, labelled
+`n_estimators × d max_depth` (so `50×d6` is 50 trees of depth 6, and `200×d10` is the deployed
+configuration); the dashed line is the 10 ms breach tier.*
 
-| config          | test F1 | AUC    | latency | share of 10 ms tier | SHAP top-5 overlap |
-| --------------- | ------- | ------ | ------- | ------------------- | ------------------ |
-| 200 × d10 (full)| 0.7359  | 0.9668 | 9.07 ms | 91 %                | 5/5 (reference)    |
-| **50 × d6**     | 0.7153  | 0.9573 | 2.52 ms | 25 %                | 5/5                |
-| 25 × d10        | 0.6957  | 0.9653 | 1.41 ms | 14 %                | 5/5                |
+Three of those eight, with the deployed forest as the reference and the pick in bold:
+
+| config (trees × depth)   | test F1 | AUC    | latency | share of 10 ms tier | SHAP top-5 overlap |
+| ------------------------- | ------- | ------ | ------- | ------------------- | ------------------ |
+| 200 × d10 (deployed)     | 0.7359  | 0.9668 | 8.73 ms | 87 %                | 5/5 (reference)    |
+| **50 × d6** (pick) | 0.7153  | 0.9573 | 2.45 ms | 25 %                | 5/5                |
+| 25 × d10                 | 0.6957  | 0.9653 | 1.44 ms | 14 %                | 5/5                |
 
 The pick is 50 trees × depth 6: −0.021 F1 (inside the full model's own ±0.048 fold spread) for a
-3.6× speed-up, and the SHAP top-5 components are identical in every configuration tried — the
-shrunken model scores like the full one and explains itself with the same features. The trade is
-acceptable on both framings; it does not change the deployment recommendation, which the MLP holds
-on both axes even against the 2.5 ms forest.
+3.6× speed-up, and the SHAP top-5 components are identical in all eight configurations — the
+shrunken model scores like the full one and explains itself with the same features. Depth matters
+less than tree count here: at 25 trees, dropping depth 10 → 6 → 4 costs F1 monotonically while
+latency barely moves, so the cheap axis is the forest size. The trade is acceptable on both
+framings; it does not change the deployment recommendation, which the MLP holds on both axes even
+against the 2.5 ms forest.
 
 **Calibration against the STUM target.** The PIC 2.0 STUM class consumes scores through fixed σ
 thresholds, so beyond discrimination the deployment question is calibration.
@@ -389,17 +425,19 @@ thresholds, so beyond discrimination the deployment question is calibration.
 | MLP         | 0.025     | 1.07           | 0.024                    |
 | Transformer | 0.041     | 1.16           | 0.032                    |
 
-Both meet the class's < 0.10 target on-distribution, and the **MLP beats the deployed 0.031
-benchmark with no calibration layer at all**; temperature scaling is near-inert for it and buys
-the Transformer a quarter of its miscalibration. Read together with §3's 0.36–0.95 threshold
-swings, the calibration problem on this data is not marginal reliability but between-block
-transfer of operating points — which is what per-site calibration exists for.
+Against the class's internal calibration target of ECE 0.031, the **deployment-recommended MLP
+meets it with no calibration layer at all** (0.025 raw), while the Transformer misses it raw and
+lands just above it after temperature scaling (0.041 → 0.032) — the target is tight enough to
+separate the two score producers. Scaling is near-inert for the MLP (T = 1.07) and buys the
+Transformer a quarter of its miscalibration. Read together with §3's 0.36–0.95 threshold swings,
+the calibration problem on this data is not marginal reliability but between-block transfer of
+operating points — which is what per-site calibration exists for.
 
-## 9. Limitations and the Week-8 Handoff
+## 9. Limitations
 
 **The attention-on-misses result rests on two fault episodes.** The one-sided claim (localisation
 succeeds in a fully missed episode) is safe; any detected-vs-missed effect size needs more stuck
-episodes, which means regenerating test-fold data — a Week-8 decision.
+episodes, which means regenerating test-fold data.
 
 **The RL saliency is one seed on one world** by design: it explains the evaluated policy, it does
 not rank methods. The cross-model back-projection for the RF is magnitude-only and correspondingly
@@ -410,5 +448,4 @@ card); its external validity is a data-collection question, not a modelling one.
 
 **The learning curves say more data still pays** for the deployment-recommended MLP — the
 capstone's "future work" has a measured direction: more blocks, not more capacity. And the
-stuck-type recall fix has an address (the decision head, §5), which is the highest-value candidate
-for the Week-8 demo's "what next" slide.
+stuck-type recall fix has an address (the decision head, §5).
