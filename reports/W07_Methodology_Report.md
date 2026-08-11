@@ -1,10 +1,10 @@
-Hongyu LIU  
+Hongyu LIU
 InGen Dynamics - ML & NN Analyst Intern, August 2026
 
 ---
 
-**Platform:** all platforms — explainability & deployment · full PIC 2.0  
-**Protocol:** every attribution runs on a refit model verified against its published metrics; canonical block split for Rover, 70/15/15 stratified for Fari/Senpai, ten-world Week-6 protocol for RL  
+**Platform:** all platforms — explainability & deployment · full PIC 2.0
+**Protocol:** every attribution runs on a refit model verified against its published metrics; canonical block split for Rover, 70/15/15 stratified for Fari/Senpai, ten-world Week-6 protocol for RL
 **Deployment gates:** Aido Rover ≤100 ms (≤10 ms breach tier in §8) · Aido Humanoid ≤50 ms · Fari ≤35 ms · Senpai ≤100 ms
 
 ## 1. Overview
@@ -174,6 +174,22 @@ engineered feature as their primary anomaly evidence. A formal rank comparison t
 projection (`Σ_k mean|SHAP_k|·|loading_kj|`) gives Spearman 0.18, not significant — but that
 projection is magnitude-only and mass-spreading, so it bounds what the comparison can show rather
 than contradicting the top-of-ranking agreement that is visible directly.
+
+**Fari and Senpai — the complete feature rankings.** Both tasks carry exactly five features, so the
+table below is a full ranking rather than a top-five cut of a longer list. Fari's label comes from a
+known linear generator, so its attributions are reported as a share of the total alongside the true
+weight share on the same normalised scale; Senpai has no such truth and is reported as mean-|SHAP|
+in probability units, per class, ordered by the across-class mean.
+
+| rank | Fari feature        | RF / MLP / true share | Senpai feature         | mean-\|SHAP\| beg / int / adv |
+| ---- | ------------------- | --------------------- | ---------------------- | ----------------------------- |
+| 1    | `topic_coherence` | 0.351 / 0.309 / 0.289 | `correct_rate`       | 0.145 / 0.118 / 0.150         |
+| 2    | `sentiment_score` | 0.256 / 0.252 / 0.237 | `hint_requests`      | 0.123 / 0.071 / 0.081         |
+| 3    | `latency_ms`      | 0.216 / 0.217 / 0.211 | `response_time_mean` | 0.074 / 0.064 / 0.070         |
+| 4    | `follow_up_rate`  | 0.150 / 0.156 / 0.184 | `session_duration`   | 0.031 / 0.032 / 0.032         |
+| 5    | `response_length` | 0.028 / 0.066 / 0.079 | `topic_switch_count` | 0.014 / 0.018 / 0.015         |
+
+The top three carry 82 % of Fari's RF attribution and 86 % of Senpai's.
 
 **Fari — scored against a known truth.** Fari's label is generated from an explicit linear score
 (weights `topic_coherence` 1.1, `sentiment_score` 0.9, `latency_ms` −0.8, `follow_up_rate` 0.7,
