@@ -30,10 +30,12 @@ This repository contains internship deliverables for task submission, self-learn
 .
 ├── README.md  
 ├── requirements.txt	# Dependencies
-├── notebooks/          # Weekly notebooks (W01–W08), named WXX_<TopicSnakeCase>.ipynb
-├── data/               # Synthetic sensor datasets and RL transition tables
-├── reports/            # Analysis reports
-├── rl/                 # RL environments, policies and MDP schema
+├── notebooks/          # Weekly notebooks (W01–W07), named WXX_<TopicSnakeCase>.ipynb
+├── shared_modules/     # World-dynamics core, feature engineering, RL eval protocol, deterministic refit
+├── data/               # Synthetic sensor datasets, canonical split, model ledger, RL transition tables
+├── reports/            # Analysis reports (W01–W07) and the mid-review deck
+├── rl/                 # RL environments, algorithms, training harness and MDP schema
+├── saved_models/       # Deterministically refit checkpoints (rover, trajectory, fari)
 ├── capstone/           # W08 capstone report + deck + retrospective
 └── weekly/             # Weekly logs, named Wk-NN-MLLog.md
 ```
@@ -43,7 +45,8 @@ This repository contains internship deliverables for task submission, self-learn
 | Week | Notebook                                         | Summary                                                                                                                                       |
 | ---- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | `W01_env_check.ipynb`                          | Verify Python / scikit-learn / PyTorch / pandas / SciPy / Gymnasium toolchain                                                                 |
-| 2    | `W02_Preprocessing_Pipeline.ipynb`             | FFT, PCA, RF feature selection; synthetic Aido Rover dataset generation                                                                       |
+| 2    | `W02_Rover_World_Core.ipynb`                   | Design and validation demo of the shared world-dynamics core (`shared_modules/rover_world.py`)                                              |
+| 2    | `W02_Preprocessing_Pipeline.ipynb`             | FFT, PCA, RF feature selection; synthetic Aido Rover dataset generation; canonical block split                                                |
 | 2    | `W02_RF_Benchmark.ipynb`                       | RF anomaly classification: metric table, confusion matrix, latency, ROC; imbalance handling                                                  |
 | 2    | `W02_Sequence_and_RL_Scaffolding.ipynb`        | Sliding-window tensor builder (rover_windows.npz) + MDP transition-table generator (rover_transitions.csv)                                    |
 | 3    | `W03_Neural_Network_Baseline.ipynb`            | MLP + CNN training, learning curves, latency                                                                                                  |
@@ -56,24 +59,32 @@ This repository contains internship deliverables for task submission, self-learn
 | 6    | `W06_IRL_Hierarchical.ipynb`                   | Reward recovery from expert trajectories; hierarchical-RL discussion (HTD-IRL connection)                                                     |
 | 6    | `W06_MultiAgent_RL.ipynb`                      | PettingZoo two-agent cooperative patrol; coordination and credit-assignment analysis (CRL-MRS)                                                |
 | 7    | `W07_Explainability.ipynb`                     | SHAP (classical + DL); attention-map recap; RL value/saliency; Senpai 3-class learner-state task                                              |
-| 7    | `W07_Pareto_and_Optimisation.ipynb`            | Full cross-family latency-accuracy Pareto frontier; one optimisation experiment (quantisation / distillation) with before/after latency       |
+| 7    | `W07_Pareto_and_Optimisation.ipynb`            | Cross-family latency-accuracy Pareto frontier (three per-platform panels); RF tree/depth reduction against the 100 ms gate and 10 ms tier     |
 
 ## Reports
 
 | Week | File                                  | Description                                                                                                                                                        |
 | ---- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | `W01_PhysicalAI_ML_Landscape.md`    | 5-page brief: per-platform ML brief; PIC 2.0 ML class map; 6-paper literature summary                                                                              |
+| 1    | `W01_Physical AI_ML_Landscape.md`   | 5-page brief: per-platform ML brief; PIC 2.0 ML class map; 6-paper literature summary                                                                              |
+| 2    | `W02_Rover_World_Core_Design.md`    | Design report for the shared world-dynamics core: dynamics, fault mechanisms, calibration                                                                          |
 | 2    | `W02_Feature_Analysis_Report.md`    | 2-page feature analysis: data quality, PCA variance/loadings, RF importance and selected feature subset, CNC comparison                                            |
+| 2    | `W02_RL_scaffold.md`                | Sequence-window and RL scaffolding design: window tensors, MDP transition table                                                                                    |
+| 3    | `W03_Neural_Network_Baseline.md`    | MLP and 1D-CNN baseline: training curves, fold results, latency                                                                                                    |
 | 3    | `W03_Sequence_Comparison_Report.md` | 3-page RNN vs Transformer Encoder: anomaly-detection accuracy, latency analysis, attention interpretability                                                        |
 | 4    | `W04_Trajectory_Report.md`          | 2–3 page: trajectory model comparison, per-horizon error analysis, Transformer vs LSTM tradeoff, quadrotor thesis connection                                      |
-| 4    | `W04_Mid_Review_Deck.pptx`          | 6–8 slide mid-point review: full model latency-vs-F1 table (RF → Transformer), deployment-feasible models highlighted; rubric scored                             |
+| 4    | `W04_Mid_Review_Deck.pptx` (+ .pdf) | 6–8 slide mid-point review: full model latency-vs-F1 table (RF → Transformer), deployment-feasible models highlighted; rubric scored                             |
 | 5    | `W05_RL_Foundations_Report.md`      | 3-page: MDP formulation and reward design, value-based RL results, offline RL discussion, PIC 2.0 GRPO connection                                                  |
 | 6    | `W06_RL_Advanced_Report.md`         | 4-page: policy-gradient vs value-based, GRPO-style result, IRL/hierarchical, multi-agent, deployment latency, HTD-IRL & CRL-MRS connections                        |
 | 7    | `W07_Methodology_Report.md`         | 5-page publication-standard methodology: preprocessing, supervised comparison, sequence/attention, RL evaluation protocol, reproducibility, deployment feasibility |
 | 7    | `W07_PIC20_ML_Analysis.md`          | 4–5 page PIC 2.0 model-class analysis: per-class experimental finding, methodology, deployment-readiness score (1–5), priority next experiment                   |
-| 8    | `W08_Capstone_Report.docx`          | 18–22 page technical ML analysis report (full methodology across all families)                                                                                    |
-| 8    | `W08_Capstone_Deck.pptx`            | 12-slide executive deck with finding-statement headlines (specific numbers on every slide)                                                                         |
-| 8    | `W08_Retrospective.md`              | 1-page retrospective: most surprising finding, one design decision to change, thesis connection spanning trajectory-prediction and RL-control framings             |
+
+## Capstone (W08, in `capstone/`)
+
+| File                       | Description                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `W08_Capstone_Report.md`   | Full technical ML analysis report: consolidated methodology and results across all model families, PIC 2.0 readiness scoring                           |
+| `W08_Capstone_Deck.pptx`   | 13-slide executive deck with finding-statement headlines (specific numbers on every slide)                                                             |
+| `W08_Retrospective.md`     | 1-page retrospective: most surprising finding, one design decision to change, thesis connection spanning trajectory-prediction and RL-control framings |
 
 ## Toolchain
 
@@ -104,7 +115,7 @@ This repository contains internship deliverables for task submission, self-learn
 | Offline RL / BC       |                  |                  |                      |      ✓      |                |   ✓   |
 | PPO                   |                  |                  |                      |      ✓      |  RL Saliency  |   ✓   |
 | GRPO-style            |                  |                  |                      |      ✓      |  RL Saliency  |   ✓   |
-| IRL                   |                  |                  |                      |   <br />✓   |                |        |
+| IRL                   |                  |                  |                      |      ✓      |                |        |
 | Multi-Agent (CRL-MRS) |                  |                  |                      |      ✓      |                |        |
 
 ## Quick Start
