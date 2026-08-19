@@ -190,6 +190,48 @@ group-relative variant keeps the navigational behaviour its prior gave it and ca
 has not seen. For the PIC 2.0 GRPO class the practical reading is that a leaderboard on the training
 layout would have selected the wrong policy.
 
+### 5.1 PPO, GRPO-style and DQN side by side
+
+The three families have been measured against the same ten worlds under the same protocol, but the
+evidence arrives in three places: §3 for where they land, §4 for the warm start and the paired tests,
+§5 for transfer. Collected into one view, with the two fixed references for scale:
+
+| policy | return (10 worlds × 5 seeds) | vs BC, paired | P(reroute\|block) | false alerts /1k | held-out layouts | latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| scripted rule (floor) | 3,931 | — | 1.00 | 3.7 | — | 0.001 ms |
+| BC prior | 4,892 ± 577 | — | 0.838 | 54.7 | not evaluated | 0.028 ms |
+| DQN, best config | 2,651 ± 480 | not tested | 0.012–0.087 | 165–319 | 1,463 → −316 to 539 | 0.066 ms |
+| GRPO-style, BC-init | 5,182 ± 585 | +291, `p = 0.193` | 0.650 | 89 | wins all five, +1,286 to +2,300 | 0.027 ms |
+| PPO, BC-init | **6,421 ± 659** | +1,530, `p = 0.037` | 0.344 | 241 | loses 2–38 % of its 5,170 | 0.115 ms |
+| expert, label-aware (ceiling) | 11,575 | — | 0.871 | 3.6 | — | — |
+
+Two provenance notes on the table. The BC retrain for this protocol carries one training seed, against five for the learned rows. DQN's return row is its best configuration (80 k steps); the held-out column follows the 250 k normalised variant used in the layout sweep, whose canonical seed-0 mean is 1,463. Week 5 did compare DQN and BC directly, 1,527 ± 1,217 against 6,287 ± 689 under its five-world protocol, which was descriptive by design: a signed-rank test on five pairs cannot go below `p = 0.0625`, which is the reason this report moved to ten worlds. The ten-world paired test was never run for this pair because the floor comparison already settles DQN's verdict.
+
+Read across the row rather than down the return column and the three separate. **DQN never clears the
+floor.** It returns below the rule policy a deployment already has, reroutes on 1.2–8.7 % of blockages
+against the rule policy's 1.00, and is the only family that does not transfer, going negative on one
+held-out layout. Tripling its budget moved the paired return by −603 (`p = 0.084`) while roughly
+doubling the false-alarm rate, so this is structural and not a training-time shortfall. **PPO wins the
+return column and loses the behaviour columns.** Its +1,530 over BC is the only significant gain over
+the prior among these three families (REINFORCE with a value baseline, outside this comparison,
+also clears it at +1,078, `p = 0.0020`), and it is bought by taking rerouting from 0.84 down to 0.34 and false alerts from 55 to 241
+per 1,000 normal steps. **The GRPO-style variant is the only one of the three that keeps its prior's navigation and
+travels**, at 0.650 rerouting and 89 false alerts, though its +291 over BC does not reach significance
+and PPO's +1,239 over it on the training layout does not either (`p = 0.084`).
+
+**Deployment conclusion: none of the three is deployable as it stands, and the blocking constraint is
+the reward rather than the algorithm.** At the platform's 10 Hz, 1,000 normal steps are 100 s of
+patrol, so the two reference policies both raise about one false alert every 27 s while PPO raises one
+every 0.4 s and even the behaviour-cloning prior one every 1.8 s. Every learned policy here runs 15 to
+65 times the reference alarm rate. That follows from the reward, which prices a caught fault at +5.0
+against a false alert at −1.5 and so makes alerting hard the correct response to it. Within
+that constraint the ordering still carries two decisions. DQN is ruled out on its own evidence. Between the
+two warm-started policy-gradient families the selection metric decides the ordering. A leaderboard
+computed on the training layout picks PPO; held-out-layout return picks the group-relative variant.
+The second is the criterion a patrol platform that meets new terrain actually faces. Re-pricing
+the alert terms and re-running the three warm-started methods of §3 is the experiment that would turn this ordering
+into a recommendation.
+
 ## 6. Hierarchy
 
 Week 5 attributed three failures to one mechanism, a consequence landing outside the effective horizon.

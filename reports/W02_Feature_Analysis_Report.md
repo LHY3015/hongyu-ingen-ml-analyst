@@ -158,7 +158,7 @@ A baseline Random Forest (100 trees, unlimited depth) was trained on all 19 PCA 
 | 0.50 (default)   | 0.7350  | 0.7651         | 0.7072      |
 | 0.49 (val-tuned) | 0.7359  | 0.7633         | 0.7105      |
 
-The tuned threshold gives a marginal F1 improvement here — the default 0.5 cutoff was already close to optimal for this fold, unlike the previous fold assignment where tuning moved precision substantially (0.48 → 0.61). Train, validation and test below are all reported at this val-tuned threshold (0.49), not the default 0.5.
+The tuned threshold gives a marginal F1 improvement here — the default 0.5 cutoff was already close to optimal for this fold, unlike the previous fold assignment where tuning moved precision substantially (0.48 → 0.61). Train, validation and test below are all reported at this val-tuned threshold (0.49). The confusion matrices in §7.2 are drawn at the default 0.5, so their counts sit one row apart from the tables: the test panel reads TN=1,531, FP=66, FN=89, TP=215 against the table's TN=1,530, FP=67, FN=88, TP=216.
 
 ### 7.2 Evaluation: Train / Validation / Test Metrics
 

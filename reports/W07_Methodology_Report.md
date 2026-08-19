@@ -427,9 +427,11 @@ Three of those eight, with the deployed forest as the reference and the pick in 
 
 The pick is 50 trees × depth 6: −0.021 F1 (inside the full model's own ±0.048 fold spread) for a
 3.6× speed-up, and the SHAP top-5 components are identical in all eight configurations — the
-shrunken model scores like the full one and explains itself with the same features. Depth matters
-less than tree count here: at 25 trees, dropping depth 10 → 6 → 4 costs F1 monotonically while
-latency barely moves, so the cheap axis is the forest size. The trade is acceptable on both
+shrunken model scores like the full one and explains itself with the same features. Tree count is the cheap
+axis: it moves the eight configurations from 1.4 ms to 8.7 ms while depth barely shifts them. On F1 the
+depth effect changes sign with forest size. At 25 trees, dropping depth 10 → 6 → 4 costs F1 monotonically
+(0.696 → 0.686 → 0.674), while at 50 and at 100 trees the shallower forest is the better one (0.715 against
+0.703, and 0.708 against 0.700) — which is the pattern the pick sits on. The trade is acceptable on both
 framings; it does not change the deployment recommendation, which the MLP holds on both axes even
 against the 2.5 ms forest.
 

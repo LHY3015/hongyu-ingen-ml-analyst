@@ -1,6 +1,4 @@
-# Retrospective
-
-Hongyu LIU
+Hongyu LIU  
 InGen Dynamics - ML & NN Analyst Intern, August 2026
 
 ---
